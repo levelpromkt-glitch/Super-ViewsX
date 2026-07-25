@@ -121,16 +121,26 @@ export class TranscriptJobExecutor {
         if (!config.enabled) continue;
 
         const providerStartTime = performance.now();
-        let result = await this.runWithTimeout(provider.getTranscript(videoId), config.timeoutMs);
-        
-        // Smart Retry para erros transitórios
-        if (!result.success && ['network_error', 'timeout', 'provider_unavailable'].includes(result.reason)) {
-          this.logEvent(requestId, videoId, provider.name, `RETRY_${result.reason}`, providerStartTime);
-          const retryStartTime = performance.now();
+        let result: ProviderResult;
+        try {
           result = await this.runWithTimeout(provider.getTranscript(videoId), config.timeoutMs);
-          this.logEvent(requestId, videoId, provider.name, result.success ? 'PROVIDER_SUCCESS' : `PROVIDER_FAILURE_${result.reason}`, retryStartTime);
-        } else {
-          this.logEvent(requestId, videoId, provider.name, result.success ? 'PROVIDER_SUCCESS' : `PROVIDER_FAILURE_${result.reason}`, providerStartTime);
+          
+          // Smart Retry para erros transitórios
+          if (!result.success && ['network_error', 'timeout', 'provider_unavailable'].includes(result.reason)) {
+            this.logEvent(requestId, videoId, provider.name, `RETRY_${result.reason}`, providerStartTime);
+            const retryStartTime = performance.now();
+            try {
+              result = await this.runWithTimeout(provider.getTranscript(videoId), config.timeoutMs);
+            } catch (retryErr: any) {
+              result = { success: false, reason: retryErr.message === 'TIMEOUT' ? 'timeout' : 'network_error' };
+            }
+            this.logEvent(requestId, videoId, provider.name, result.success ? 'PROVIDER_SUCCESS' : `PROVIDER_FAILURE_${result.reason}`, retryStartTime);
+          } else {
+            this.logEvent(requestId, videoId, provider.name, result.success ? 'PROVIDER_SUCCESS' : `PROVIDER_FAILURE_${result.reason}`, providerStartTime);
+          }
+        } catch (err: any) {
+          result = { success: false, reason: err.message === 'TIMEOUT' ? 'timeout' : 'network_error' };
+          this.logEvent(requestId, videoId, provider.name, `PROVIDER_FAILURE_${result.reason}`, providerStartTime);
         }
 
         if (result.success) {
