@@ -1,4 +1,4 @@
-import { fetchTranscriptWithFallbackFn } from '@/server/transcriptFn';
+import { fetchTranscriptWithFallbackFn } from './transcriptFn';
 
 export type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
 
