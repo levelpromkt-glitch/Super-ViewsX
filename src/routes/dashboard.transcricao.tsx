@@ -16,24 +16,9 @@ export const Route = createFileRoute("/dashboard/transcricao")({
   component: TranscricaoPage,
 });
 
-type Line = { time: string; seconds: number; text: string };
+import { TranscriptService, TranscriptError } from "@/services/transcriptService";
 
-const MOCK_TRANSCRIPT: Line[] = [
-  { time: "00:01", seconds: 1, text: "Olá pessoal, tudo bem? Sejam muito bem-vindos a mais um vídeo aqui no canal." },
-  { time: "00:08", seconds: 8, text: "Hoje eu vou mostrar como criar cortes estratégicos que viralizam nas redes sociais." },
-  { time: "00:17", seconds: 17, text: "Antes de começar, deixa o like no vídeo e se inscreve aqui no canal pra não perder nenhuma novidade." },
-  { time: "00:27", seconds: 27, text: "Esse tipo de conteúdo ajuda a prender mais atenção do espectador e aumenta o tempo de retenção." },
-  { time: "00:35", seconds: 35, text: "Primeiro você precisa escolher um bom trecho do vídeo, algo que prenda a atenção logo nos primeiros segundos." },
-  { time: "00:48", seconds: 48, text: "Lembre-se: o gancho é tudo. Sem gancho, o vídeo não decola e o espectador fecha em poucos segundos." },
-  { time: "01:02", seconds: 62, text: "Agora vamos selecionar a melhor parte para transformar em corte e publicar no Shorts e Reels." },
-  { time: "01:18", seconds: 78, text: "Uma dica importante: cortes entre 30 e 60 segundos costumam ter o melhor desempenho nas plataformas." },
-  { time: "01:35", seconds: 95, text: "Sempre legende seus cortes. A maioria das pessoas assiste sem som, principalmente no feed." },
-  { time: "01:52", seconds: 112, text: "Use uma chamada forte no início, algo que faça a pessoa parar de rolar a tela imediatamente." },
-  { time: "02:10", seconds: 130, text: "Bora pra parte prática agora, vou te mostrar passo a passo como eu organizo os meus cortes." },
-  { time: "02:28", seconds: 148, text: "Eu gosto de separar por temas e por nível de engajamento esperado em cada plataforma." },
-  { time: "02:45", seconds: 165, text: "Pra finalizar, lembre-se de testar diferentes formatos e analisar as métricas com calma." },
-  { time: "03:02", seconds: 182, text: "É isso pessoal, espero que tenha curtido. Nos vemos no próximo vídeo. Valeu!" },
-];
+type Line = { time: string; seconds: number; text: string; start: number; duration: number };
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -128,15 +113,27 @@ function TranscricaoPage() {
     setSuccess(false);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    if (!videoId) return;
+    
     setLoading(true);
     setTranscript(null);
     setActiveLine(null);
     setSuccess(false);
-    setTimeout(() => {
-      setTranscript(MOCK_TRANSCRIPT);
+    setUrlError(null);
+
+    try {
+      const result = await TranscriptService.getTranscript(videoId);
+      setTranscript(result.lines);
+    } catch (error: any) {
+      if (error instanceof TranscriptError) {
+        setUrlError(error.message);
+      } else {
+        setUrlError("Ocorreu um erro inesperado ao buscar a transcrição.");
+      }
+    } finally {
       setLoading(false);
-    }, 1600);
+    }
   };
 
   const handleLineClick = (line: Line) => {
