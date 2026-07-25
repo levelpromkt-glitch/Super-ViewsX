@@ -17,7 +17,7 @@ export class ExternalTranscriptProvider implements TranscriptProvider {
     try {
       // Implementação mockada. Quando for assinar a API, basta substituir a URL e Headers.
       // Exemplo usando "YouTube Transcript API" do RapidAPI
-      const url = `https://youtube-transcript3.p.rapidapi.com/api/transcript?video_id=${videoId}`;
+      const url = `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${videoId}&flat_text=false&lang=pt,en`;
       const options = {
         method: 'GET',
         headers: {
@@ -37,17 +37,21 @@ export class ExternalTranscriptProvider implements TranscriptProvider {
 
       const json = await response.json();
       
-      if (!json || !json.transcript) {
+      if (!json || !json.success || !Array.isArray(json.transcript)) {
         return { success: false, reason: 'no_captions' };
       }
 
-      const lines = json.transcript.map((item: any) => ({
-        time: formatTime(item.start),
-        seconds: item.start,
-        text: item.text,
-        start: item.start,
-        duration: item.duration || 0,
-      }));
+      const lines = json.transcript.map((item: any) => {
+        const startNum = parseFloat(item.offset) || 0;
+        const durationNum = parseFloat(item.duration) || 0;
+        return {
+          time: formatTime(startNum),
+          seconds: startNum,
+          text: item.text,
+          start: startNum,
+          duration: durationNum,
+        };
+      });
 
       return {
         success: true,
