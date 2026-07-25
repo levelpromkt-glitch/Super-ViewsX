@@ -8,15 +8,15 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
+import { Route as rootRouteImport } from './routes/__root.tsx'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
-import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
-import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
-import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
-import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
-import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
+import { Route as DashboardRouteImport } from './routes/dashboard.tsx'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard.index.tsx'
+import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin.tsx'
+import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag.tsx'
+import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates.tsx'
+import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players.tsx'
+import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao.tsx'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -92,33 +92,33 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
-    | '/dashboard'
-    | '/dashboard/admin'
-    | '/dashboard/hashtag'
-    | '/dashboard/templates'
-    | '/dashboard/top-players'
-    | '/dashboard/transcricao'
-    | '/dashboard/'
+  | '/'
+  | '/dashboard'
+  | '/dashboard/admin'
+  | '/dashboard/hashtag'
+  | '/dashboard/templates'
+  | '/dashboard/top-players'
+  | '/dashboard/transcricao'
+  | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
-    | '/dashboard/admin'
-    | '/dashboard/hashtag'
-    | '/dashboard/templates'
-    | '/dashboard/top-players'
-    | '/dashboard/transcricao'
-    | '/dashboard'
+  | '/'
+  | '/dashboard/admin'
+  | '/dashboard/hashtag'
+  | '/dashboard/templates'
+  | '/dashboard/top-players'
+  | '/dashboard/transcricao'
+  | '/dashboard'
   id:
-    | '__root__'
-    | '/'
-    | '/dashboard'
-    | '/dashboard/admin'
-    | '/dashboard/hashtag'
-    | '/dashboard/templates'
-    | '/dashboard/top-players'
-    | '/dashboard/transcricao'
-    | '/dashboard/'
+  | '__root__'
+  | '/'
+  | '/dashboard'
+  | '/dashboard/admin'
+  | '/dashboard/hashtag'
+  | '/dashboard/templates'
+  | '/dashboard/top-players'
+  | '/dashboard/transcricao'
+  | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {

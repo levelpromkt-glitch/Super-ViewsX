@@ -5,7 +5,7 @@ import type { Campaign } from "@/lib/types";
 import {
   createCampaign,
   deleteCampaign,
-  getCampaigns,
+  fetchCampaigns,
   resetCampaigns,
   updateCampaign,
   subscribeCampaigns,
@@ -74,9 +74,15 @@ function CampaignsAdmin() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setList(getCampaigns());
-    const unsub = subscribeCampaigns(() => setList(getCampaigns()));
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchCampaigns();
+      if (!cancelled) setList(data);
+    };
+    load();
+    const unsub = subscribeCampaigns(load);
     return () => {
+      cancelled = true;
       unsub();
     };
   }, []);
@@ -89,13 +95,13 @@ function CampaignsAdmin() {
     setEditing(c);
     setOpen(true);
   };
-  const handleSave = (c: Campaign) => {
-    if (list.some((x) => x.id === c.id)) updateCampaign(c.id, c);
-    else createCampaign(c);
+  const handleSave = async (c: Campaign) => {
+    if (list.some((x) => x.id === c.id)) await updateCampaign(c.id, c);
+    else await createCampaign(c);
     setOpen(false);
   };
-  const handleDelete = (c: Campaign) => {
-    if (confirm(`Excluir a campanha "${c.name}"?`)) deleteCampaign(c.id);
+  const handleDelete = async (c: Campaign) => {
+    if (confirm(`Excluir a campanha "${c.name}"?`)) await deleteCampaign(c.id);
   };
   const handleReset = () => {
     if (confirm("Restaurar as campanhas iniciais? Suas edições serão perdidas."))

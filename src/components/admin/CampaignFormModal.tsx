@@ -40,12 +40,14 @@ export function CampaignFormModal({
 }) {
   const [form, setForm] = useState<Campaign>(empty());
   const [coverError, setCoverError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setForm(initial ? { ...initial } : empty());
       setCoverError(null);
+      setIsSaving(false);
     }
   }, [open, initial]);
 
@@ -60,8 +62,7 @@ export function CampaignFormModal({
     }));
   };
 
-  // Mock: salva a imagem como data URL no próprio objeto da campanha.
-  // No futuro: subir para Supabase Storage e salvar apenas a URL pública em coverImage.
+  // Converte arquivo em base64 para envio. O Service enviará ao Supabase Storage.
   const handleCoverChange = (file: File | null) => {
     setCoverError(null);
     if (!file) return;
@@ -69,8 +70,8 @@ export function CampaignFormModal({
       setCoverError("Selecione um arquivo de imagem.");
       return;
     }
-    if (file.size > MAX_COVER_BYTES) {
-      setCoverError("Imagem muito grande (limite 1.5MB no modo mock).");
+    if (file.size > 2 * 1024 * 1024) {
+      setCoverError("Imagem muito grande (limite 2MB).");
       return;
     }
     const reader = new FileReader();
@@ -85,10 +86,15 @@ export function CampaignFormModal({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
-    onSave({ ...form, name: form.name.trim(), promoter: form.promoter.trim() });
+    setIsSaving(true);
+    try {
+      await onSave({ ...form, name: form.name.trim(), promoter: form.promoter.trim() });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -135,9 +141,6 @@ export function CampaignFormModal({
               />
             </div>
             {coverError && <div className="admin-cover-error">{coverError}</div>}
-            <div className="admin-cover-hint">
-              Mock: a imagem fica salva localmente (base64). Quando integrar com banco/storage, este campo vira a URL pública.
-            </div>
           </div>
           <div className="admin-form-grid">
             <label className="admin-field">
@@ -232,11 +235,11 @@ export function CampaignFormModal({
             </label>
           </div>
           <div className="admin-modal-footer">
-            <button type="button" className="btn-outline" onClick={onClose}>
+            <button type="button" className="btn-outline" onClick={onClose} disabled={isSaving}>
               Cancelar
             </button>
-            <button type="submit" className="btn-primary">
-              {initial ? "Salvar alterações" : "Criar campanha"}
+            <button type="submit" className="btn-primary" disabled={isSaving}>
+              {isSaving ? "Salvando..." : initial ? "Salvar alterações" : "Criar campanha"}
             </button>
           </div>
         </form>

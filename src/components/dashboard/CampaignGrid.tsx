@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCampaigns, subscribeCampaigns } from "@/lib/campaigns";
+import { fetchCampaigns, subscribeCampaigns } from "@/services/campaignsService";
 import type { Campaign } from "@/lib/types";
 import { CampaignCard } from "./CampaignCard";
 import { CampaignModal } from "./CampaignModal";
@@ -13,7 +13,7 @@ export function CampaignGrid() {
     let cancelled = false;
     const load = () =>
       fetchCampaigns()
-        .then((c) => !cancelled && setCampaigns(c))
+        .then((c) => !cancelled && setCampaigns(c.filter(camp => camp.status === "Ativa")))
         .catch(() => !cancelled && setError(true));
     load();
     const unsub = subscribeCampaigns(load);
