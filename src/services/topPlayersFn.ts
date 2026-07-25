@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/start';
+import { createServerFn } from '@tanstack/react-start';
 import { CompetitionEngine } from './competition/CompetitionEngine';
 import { YoutubeCompetitionProvider } from './competition/providers/YoutubeCompetitionProvider';
 import { MatchMode, Player } from './competition/types';

@@ -1,4 +1,4 @@
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { CompetitionProvider, CompetitionQuery, Player } from './types';
 import { SearchAggregator } from './analytics/SearchAggregator';
 import { InsightGenerator } from './analytics/InsightGenerator';
