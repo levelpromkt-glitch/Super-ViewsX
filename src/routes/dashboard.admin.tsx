@@ -13,7 +13,7 @@ import {
 import {
   createTemplate,
   deleteTemplate,
-  getTemplates,
+  fetchTemplates,
   subscribeTemplates,
   updateTemplate,
   type Template,
@@ -197,12 +197,19 @@ function TemplatesAdmin() {
   const [image, setImage] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setList(getTemplates());
-    const unsub = subscribeTemplates(() => setList(getTemplates()));
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchTemplates();
+      if (!cancelled) setList(data);
+    };
+    load();
+    const unsub = subscribeTemplates(load);
     return () => {
+      cancelled = true;
       unsub();
     };
   }, []);
@@ -222,18 +229,23 @@ function TemplatesAdmin() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !image || !downloadUrl.trim()) {
       alert("Preencha nome, imagem e link de download.");
       return;
     }
-    if (editingId) {
-      updateTemplate(editingId, { name: name.trim(), image, downloadUrl: downloadUrl.trim() });
-    } else {
-      createTemplate({ name: name.trim(), image, downloadUrl: downloadUrl.trim() });
+    setIsSaving(true);
+    try {
+      if (editingId) {
+        await updateTemplate(editingId, { name: name.trim(), image, downloadUrl: downloadUrl.trim() });
+      } else {
+        await createTemplate({ name: name.trim(), image, downloadUrl: downloadUrl.trim() });
+      }
+      reset();
+    } finally {
+      setIsSaving(false);
     }
-    reset();
   };
 
   const handleEdit = (t: Template) => {
@@ -243,9 +255,9 @@ function TemplatesAdmin() {
     setDownloadUrl(t.downloadUrl);
   };
 
-  const handleDelete = (t: Template) => {
+  const handleDelete = async (t: Template) => {
     if (confirm(`Excluir o template "${t.name}"?`)) {
-      deleteTemplate(t.id);
+      await deleteTemplate(t.id);
       if (editingId === t.id) reset();
     }
   };
@@ -322,12 +334,12 @@ function TemplatesAdmin() {
 
         <div className="admin-modal-footer">
           {editingId && (
-            <button type="button" className="btn-outline" onClick={reset}>
+            <button type="button" className="btn-outline" onClick={reset} disabled={isSaving}>
               Cancelar
             </button>
           )}
-          <button type="submit" className="btn-primary">
-            <Save size={15} /> {editingId ? "Atualizar template" : "Salvar template"}
+          <button type="submit" className="btn-primary" disabled={isSaving}>
+            <Save size={15} /> {isSaving ? "Salvando..." : editingId ? "Atualizar template" : "Salvar template"}
           </button>
         </div>
       </form>

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { X, Download, Eye } from "lucide-react";
 import {
-  getTemplates,
+  fetchTemplates,
   subscribeTemplates,
   type Template,
 } from "@/services/templatesService";
@@ -16,9 +16,15 @@ function TemplatesPage() {
   const [selected, setSelected] = useState<Template | null>(null);
 
   useEffect(() => {
-    setList(getTemplates());
-    const unsub = subscribeTemplates(() => setList(getTemplates()));
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchTemplates();
+      if (!cancelled) setList(data);
+    };
+    load();
+    const unsub = subscribeTemplates(load);
     return () => {
+      cancelled = true;
       unsub();
     };
   }, []);

@@ -1,79 +1,124 @@
-// Frontend-only templates service backed by localStorage.
+import { supabase } from "@/lib/supabase";
+
 export type Template = {
   id: string;
   name: string;
-  image: string; // data URL or external URL
+  image: string; // URL pública da imagem
   downloadUrl: string;
 };
 
-const STORAGE_KEY = "superviewsx.templates.v1";
+// Event bus para avisar os componentes sobre mudanças
 const listeners = new Set<() => void>();
+function notify() {
+  listeners.forEach((l) => l());
+}
 
-const SEED: Template[] = [
-  {
-    id: "t-seed-1",
-    name: "Corte Viral Neon",
-    image:
-      "https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=800&q=80",
-    downloadUrl: "https://example.com/template-neon.zip",
-  },
-  {
-    id: "t-seed-2",
-    name: "Clipe Minimal Dark",
-    image:
-      "https://images.unsplash.com/photo-1620207418302-439b387441b0?w=800&q=80",
-    downloadUrl: "https://example.com/template-minimal.zip",
-  },
-  {
-    id: "t-seed-3",
-    name: "Reels Energético",
-    image:
-      "https://images.unsplash.com/photo-1611162616475-46b635cb6868?w=800&q=80",
-    downloadUrl: "https://example.com/template-energy.zip",
-  },
-];
+export function subscribeTemplates(cb: () => void) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
 
-function read(): Template[] {
-  if (typeof window === "undefined") return SEED;
+export async function fetchTemplates(): Promise<Template[]> {
+  const { data, error } = await supabase
+    .from("templates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching templates:", error);
+    return [];
+  }
+  return data || [];
+}
+
+// Para manter compatibilidade com componentes que ainda não usam fetchTemplates (retorna vazio)
+export function getTemplates(): Template[] {
+  return [];
+}
+
+/**
+ * Faz upload de imagem base64 pro Supabase Storage.
+ */
+async function uploadTemplateImage(base64: string, templateId: string): Promise<string | null> {
+  if (!base64.startsWith("data:image")) return base64; 
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-      return SEED;
+    const response = await fetch(base64);
+    const blob = await response.blob();
+    const ext = blob.type.split("/")[1] || "png";
+    const filename = `${templateId}-${Date.now()}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from("templates")
+      .upload(filename, blob, { upsert: true });
+
+    if (error) {
+      console.error("Erro no upload da imagem do template:", error);
+      return null;
     }
-    return JSON.parse(raw) as Template[];
-  } catch {
-    return SEED;
+
+    const { data: publicUrlData } = supabase.storage
+      .from("templates")
+      .getPublicUrl(data.path);
+
+    return publicUrlData.publicUrl;
+  } catch (err) {
+    console.error("Failed to upload template image:", err);
+    return null;
   }
 }
 
-function write(list: Template[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  listeners.forEach((fn) => fn());
+export async function createTemplate(data: Omit<Template, "id"> & { id?: string }): Promise<Template | null> {
+  const id = data.id || crypto.randomUUID();
+  let image = data.image;
+
+  if (image && image.startsWith("data:image")) {
+    const uploadedUrl = await uploadTemplateImage(image, id);
+    if (uploadedUrl) image = uploadedUrl;
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("templates")
+    .insert([{ ...data, id, image }])
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erro ao criar template:", error);
+    return null;
+  }
+  notify();
+  return inserted;
 }
 
-export function getTemplates(): Template[] {
-  return read();
+export async function updateTemplate(id: string, data: Partial<Template>): Promise<Template | null> {
+  let image = data.image;
+
+  if (image && image.startsWith("data:image")) {
+    const uploadedUrl = await uploadTemplateImage(image, id);
+    if (uploadedUrl) image = uploadedUrl;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("templates")
+    .update({ ...data, image })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erro ao atualizar template:", error);
+    return null;
+  }
+  notify();
+  return updated;
 }
 
-export function createTemplate(t: Omit<Template, "id">): Template {
-  const list = read();
-  const next: Template = { ...t, id: `t-${Date.now()}` };
-  write([next, ...list]);
-  return next;
-}
-
-export function updateTemplate(id: string, patch: Partial<Template>) {
-  const list = read().map((t) => (t.id === id ? { ...t, ...patch } : t));
-  write(list);
-}
-
-export function deleteTemplate(id: string) {
-  write(read().filter((t) => t.id !== id));
-}
-
-export function subscribeTemplates(fn: () => void) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+export async function deleteTemplate(id: string): Promise<void> {
+  const { error } = await supabase.from("templates").delete().eq("id", id);
+  if (error) {
+    console.error("Erro ao deletar template:", error);
+  } else {
+    notify();
+  }
 }
