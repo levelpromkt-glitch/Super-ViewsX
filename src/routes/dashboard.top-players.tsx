@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useEffect, useState } from "react";
+import { useServerFn } from '@tanstack/start';
+import { getTopPlayersFn } from '../services/topPlayersFn';
+import { Player, TopVideo, MatchMode } from '../services/competition/types';
 import {
   ChevronDown,
   Crown,
@@ -10,7 +13,6 @@ import {
   Medal,
   MessageCircle,
   Play,
-  
   Search,
   Sparkles,
   Trophy,
@@ -18,61 +20,20 @@ import {
   Calendar,
   TrendingUp,
   X,
+  Filter,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/top-players")({
   component: TopPlayersPage,
 });
 
-type Period = "5d" | "10d" | "15d" | "30d" | "all";
+type Period = "5d" | "10d" | "15d" | "30d";
 
 const PERIODS: { id: Period; label: string; short: string; days: number }[] = [
   { id: "5d", label: "5 dias", short: "5 dias", days: 5 },
   { id: "10d", label: "10 dias", short: "10 dias", days: 10 },
   { id: "15d", label: "15 dias", short: "15 dias", days: 15 },
   { id: "30d", label: "30 dias", short: "30 dias", days: 30 },
-  { id: "all", label: "Todo o período", short: "todo o período", days: 9999 },
-];
-
-type TopVideo = {
-  title: string;
-  views: number;
-  likes: number;
-  comments: number;
-  daysAgo: number;
-  postedAt: string;
-  thumbHue: number;
-  url: string;
-};
-
-type Player = {
-  id: string;
-  name: string;
-  avatarHue: number;
-  totalViews: number;
-  posts: number;
-  avgViews: number;
-  engagement: number;
-  bestViews: number;
-  postsPerDay: number;
-  topHours: string[];
-  bestHour: string;
-  lastVideoAgo: string;
-  topVideos: TopVideo[];
-  growth: number[];
-};
-
-const PLAYER_NAMES = [
-  "Cortes Alpha",
-  "ViralCuts BR",
-  "ClipMaster Pro",
-  "TopClips HD",
-  "Highlights Plus",
-  "ShortMania",
-  "CutKing",
-  "ClipNation",
-  "MomentosBR",
-  "PrimeClips",
 ];
 
 function formatNumber(n: number) {
@@ -85,87 +46,6 @@ function formatNumber(n: number) {
 
 function normalizeHashtag(raw: string) {
   return raw.trim().replace(/\s+/g, "").replace(/^#+/, "");
-}
-
-function seededRand(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return () => {
-    h += 0x6d2b79f5;
-    let t = h;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generatePlayers(tag1: string, tag2: string, period: Period): Player[] {
-  const rand = seededRand(`${tag1}|${tag2}|${period}`);
-  const periodDays = PERIODS.find((p) => p.id === period)?.days ?? 15;
-  const factor = period === "all" ? 4 : Math.max(0.5, periodDays / 15);
-
-  return PLAYER_NAMES.slice(0, 10).map((name, i) => {
-    const baseViews = Math.round((1_200_000 - i * 95_000) * (0.7 + rand() * 0.6) * factor);
-    const posts = Math.max(
-      4,
-      Math.round((28 - i * 1.8) * (0.7 + rand() * 0.6) * Math.min(factor, 2.5)),
-    );
-    const avg = Math.round(baseViews / posts);
-    const best = Math.round(avg * (1.8 + rand() * 1.6));
-    const engagement = Math.round((14 - i * 0.7 + rand() * 2) * 10) / 10;
-    const postsPerDay = Math.round((posts / Math.min(periodDays, 60)) * 10) / 10;
-    const hours = ["18h", "19h", "20h", "21h", "22h"].sort(() => rand() - 0.5);
-    const topHours = hours.slice(0, 3);
-    const bestHour = topHours[0];
-    const topVideos: TopVideo[] = Array.from({ length: 5 }).map((_, k) => {
-      const views = Math.round(best * (1 - k * 0.15) * (0.9 + rand() * 0.2));
-      const vid = Array.from({ length: 11 })
-        .map(() => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"[Math.floor(rand() * 64)])
-        .join("");
-      return {
-        title: [
-          `O melhor corte de #${tag1} dessa semana`,
-          `Reação inacreditável na competição #${tag2}`,
-          `Esse momento de #${tag1} viralizou no #${tag2}`,
-          `Top jogada que ninguém viu em #${tag2}`,
-          `Compilado #${tag1} que está bombando`,
-        ][(i + k) % 5],
-        views,
-        likes: Math.round(views * (0.07 + rand() * 0.04)),
-        comments: Math.round(views * (0.004 + rand() * 0.003)),
-        daysAgo: Math.max(1, Math.round(rand() * Math.min(periodDays, 30))),
-        postedAt: `${17 + Math.floor(rand() * 6)}h${String(Math.floor(rand() * 60)).padStart(2, "0")}`,
-        thumbHue: Math.floor(rand() * 360),
-        url: `https://www.youtube.com/watch?v=${vid}`,
-      };
-    });
-    const points = Math.min(Math.max(periodDays, 7), 30);
-    let cur = avg * 0.6;
-    const growth: number[] = [];
-    for (let g = 0; g < points; g++) {
-      cur = cur * (0.95 + rand() * 0.18);
-      growth.push(Math.max(1000, Math.round(cur)));
-    }
-    return {
-      id: `p${i}`,
-      name,
-      avatarHue: Math.floor(rand() * 360),
-      totalViews: baseViews,
-      posts,
-      avgViews: avg,
-      engagement,
-      bestViews: best,
-      postsPerDay,
-      topHours,
-      bestHour,
-      lastVideoAgo: `há ${Math.max(1, Math.floor(rand() * 12))}h`,
-      topVideos,
-      growth,
-    };
-  });
 }
 
 function HashtagInput({
@@ -193,9 +73,17 @@ function HashtagInput({
   );
 }
 
-function avatarStyle(hue: number): React.CSSProperties {
+function avatarStyle(url?: string, hue?: number): React.CSSProperties {
+  if (url) {
+    return {
+      backgroundImage: `url(${url})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    };
+  }
+  const h = hue || 0;
   return {
-    background: `linear-gradient(135deg, hsl(${hue} 65% 40%), hsl(${(hue + 50) % 360} 65% 25%))`,
+    background: `linear-gradient(135deg, hsl(${h} 65% 40%), hsl(${(h + 50) % 360} 65% 25%))`,
   };
 }
 
@@ -241,16 +129,20 @@ function TopPlayersPage() {
   const [tag1, setTag1] = useState("");
   const [tag2, setTag2] = useState("");
   const [period, setPeriod] = useState<Period>("15d");
+  const [matchMode, setMatchMode] = useState<MatchMode>("AND");
   const [periodOpen, setPeriodOpen] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastQuery, setLastQuery] = useState<{ tag1: string; tag2: string; period: Period } | null>(
-    null,
-  );
+  
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [lastQuery, setLastQuery] = useState<{ tag1: string; tag2: string; period: Period; matchMode: MatchMode } | null>(null);
   const [selected, setSelected] = useState<Player | null>(null);
+  
+  const [sortBy, setSortBy] = useState<'totalViews' | 'posts' | 'avgViews' | 'engagement'>('totalViews');
+
+  const fetchTopPlayers = useServerFn(getTopPlayersFn);
 
   useEffect(() => {
     if (!periodOpen) return;
@@ -271,25 +163,45 @@ function TopPlayersPage() {
 
   const currentPeriodLabel = PERIODS.find((p) => p.id === period)?.label ?? "";
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!tag1 || !tag2) {
       setError("Preencha as duas hashtags para buscar o ranking.");
       return;
     }
     setError(null);
     setLoading(true);
-    setSearched(false);
-    setTimeout(() => {
-      setLastQuery({ tag1, tag2, period });
+    setPlayers([]);
+    setLastQuery(null);
+
+    const periodDays = PERIODS.find(p => p.id === period)?.days || 15;
+
+    try {
+      const result = await fetchTopPlayers({
+        data: {
+          tag1,
+          tag2,
+          periodDays,
+          matchMode,
+          maxPages: 3 // Configurável, max 3 páginas = ~150 resultados p/ economizar cota (em produção podemos usar 5-10)
+        }
+      });
+
+      if (result.success) {
+        setPlayers(result.players || []);
+        setLastQuery({ tag1, tag2, period, matchMode });
+      } else {
+        setError(result.error || "Erro desconhecido ao buscar.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Erro de rede ao buscar.");
+    } finally {
       setLoading(false);
-      setSearched(true);
-    }, 1000);
+    }
   };
 
-  const players = useMemo(() => {
-    if (!lastQuery) return [];
-    return generatePlayers(lastQuery.tag1, lastQuery.tag2, lastQuery.period);
-  }, [lastQuery]);
+  const sortedPlayers = useMemo(() => {
+    return [...players].sort((a, b) => b[sortBy] - a[sortBy]);
+  }, [players, sortBy]);
 
   const totals = useMemo(
     () =>
@@ -309,13 +221,12 @@ function TopPlayersPage() {
       {/* Search card */}
       <section className="tp-search">
         <div className="tp-search-head">
-          <h2 className="tp-search-title">Analisar competição</h2>
+          <h2 className="tp-search-title">Analisar competição (API Real)</h2>
         </div>
 
-
-        <div className="tp-form">
+        <div className="tp-form" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
           <div className="tp-field">
-            <label className="tp-field-label">Influenciador ou marca</label>
+            <label className="tp-field-label">Hashtag 1</label>
             <HashtagInput
               value={tag1}
               onChange={(v) => {
@@ -327,7 +238,7 @@ function TopPlayersPage() {
             />
           </div>
           <div className="tp-field">
-            <label className="tp-field-label">Plataforma ou competição</label>
+            <label className="tp-field-label">Hashtag 2</label>
             <HashtagInput
               value={tag2}
               onChange={(v) => {
@@ -337,6 +248,18 @@ function TopPlayersPage() {
               placeholder="Ex: #Keoto"
               hasError={!!error && !tag2}
             />
+          </div>
+          <div className="tp-field tp-field-period">
+            <label className="tp-field-label">Regra</label>
+            <select 
+              className="hs-input" 
+              value={matchMode} 
+              onChange={e => setMatchMode(e.target.value as MatchMode)}
+              style={{ backgroundColor: 'transparent', height: 42, color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              <option value="AND">AND (As Duas)</option>
+              <option value="OR">OR (Qualquer Uma)</option>
+            </select>
           </div>
           <div className="tp-field tp-field-period">
             <label className="tp-field-label">Período</label>
@@ -376,12 +299,11 @@ function TopPlayersPage() {
           </div>
         </div>
 
-
         {error && <div className="hs-error">{error}</div>}
 
         <div className="tp-search-foot">
-          <span className="hs-demo-note">
-            Dados demonstrativos. Em breve esta função será conectada à API real do YouTube.
+          <span className="hs-demo-note" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Integrado ao YouTube Data API. Inclui paginação dinâmica e cache no Supabase.
           </span>
           <button className="hs-btn-primary" onClick={handleSearch} disabled={loading}>
             {loading ? (
@@ -402,24 +324,19 @@ function TopPlayersPage() {
           <div className="hs-loader-bar">
             <span />
           </div>
-          <p>Analisando competidores e montando o ranking...</p>
+          <p>Pesquisando vídeos, somando estatísticas e validando cache...</p>
         </div>
       )}
 
-      {/* Empty state removed for a cleaner layout */}
-
-
-      {!loading && searched && lastQuery && (
+      {!loading && lastQuery && (
         <>
           <div className="tp-recap">
             <h3 className="tp-recap-title">
               Ranking de <strong>#{lastQuery.tag1}</strong>
-              <span className="tp-recap-plus">+</span>
+              <span className="tp-recap-plus"> {lastQuery.matchMode} </span>
               <strong>#{lastQuery.tag2}</strong>
               <span className="tp-recap-period">
-                {lastQuery.period === "all"
-                  ? "em todo o período"
-                  : `nos últimos ${queryPeriodShort}`}
+                nos últimos {queryPeriodShort}
               </span>
             </h3>
             <div className="tp-recap-cards">
@@ -450,17 +367,25 @@ function TopPlayersPage() {
             </div>
           ) : (
             <section className="tp-board">
-              <div className="tp-board-head">
+              <div className="tp-board-head" style={{ cursor: 'pointer' }}>
                 <span className="tp-col-pos">POS</span>
                 <span className="tp-col-player">PLAYER</span>
-                <span className="tp-col-num">VIEWS</span>
-                <span className="tp-col-num">POSTS</span>
-                <span className="tp-col-num">MÉDIA</span>
-                <span className="tp-col-num">ENGAJAMENTO</span>
+                <span className="tp-col-num" onClick={() => setSortBy('totalViews')}>
+                  VIEWS {sortBy === 'totalViews' && <Filter size={12} />}
+                </span>
+                <span className="tp-col-num" onClick={() => setSortBy('posts')}>
+                  POSTS {sortBy === 'posts' && <Filter size={12} />}
+                </span>
+                <span className="tp-col-num" onClick={() => setSortBy('avgViews')}>
+                  MÉDIA {sortBy === 'avgViews' && <Filter size={12} />}
+                </span>
+                <span className="tp-col-num" onClick={() => setSortBy('engagement')}>
+                  ENGAJAMENTO {sortBy === 'engagement' && <Filter size={12} />}
+                </span>
                 <span className="tp-col-action">AÇÃO</span>
               </div>
               <div className="tp-board-body">
-                {players.map((p, idx) => {
+                {sortedPlayers.map((p, idx) => {
                   const rank = idx + 1;
                   return (
                     <div
@@ -472,8 +397,8 @@ function TopPlayersPage() {
                         {rankIcon(rank)}
                       </div>
                       <div className="tp-col-player">
-                        <div className="tp-avatar tp-avatar-sm" style={avatarStyle(p.avatarHue)}>
-                          {p.name.charAt(0)}
+                        <div className="tp-avatar tp-avatar-sm" style={avatarStyle(p.avatarUrl, p.avatarHue)}>
+                          {!p.avatarUrl && p.name.charAt(0)}
                         </div>
                         <span className="tp-player-name">{p.name}</span>
                       </div>
@@ -517,12 +442,12 @@ function TopPlayersPage() {
               <X size={18} />
             </button>
             <div className="tp-modal-head">
-              <div className="tp-avatar tp-avatar-lg" style={avatarStyle(selected.avatarHue)}>
-                {selected.name.charAt(0)}
+              <div className="tp-avatar tp-avatar-lg" style={avatarStyle(selected.avatarUrl, selected.avatarHue)}>
+                {!selected.avatarUrl && selected.name.charAt(0)}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="tp-modal-rank">
-                  #{players.findIndex((p) => p.id === selected.id) + 1} no ranking
+                  #{sortedPlayers.findIndex((p) => p.id === selected.id) + 1} no ranking
                 </div>
                 <h2 className="tp-modal-name">{selected.name}</h2>
               </div>
@@ -571,7 +496,7 @@ function TopPlayersPage() {
 
             <div className="tp-modal-section">
               <h4>
-                <TrendingUp size={13} /> Crescimento no período
+                <TrendingUp size={13} /> Views por Dia de Publicação
               </h4>
               <GrowthChart data={selected.growth} />
             </div>
@@ -592,10 +517,13 @@ function TopPlayersPage() {
                     <div
                       className="tp-video-thumb"
                       style={{
-                        background: `linear-gradient(135deg, hsl(${v.thumbHue} 55% 18%), hsl(${(v.thumbHue + 40) % 360} 60% 28%))`,
+                        backgroundImage: v.thumbUrl ? `url(${v.thumbUrl})` : 'none',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        backgroundColor: !v.thumbUrl ? '#333' : 'transparent'
                       }}
                     >
-                      <Play size={22} />
+                      {!v.thumbUrl && <Play size={22} />}
                     </div>
                     <div className="tp-video-body">
                       <div className="tp-video-title">{v.title}</div>
