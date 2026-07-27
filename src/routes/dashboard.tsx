@@ -7,7 +7,6 @@ import {
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Columns2 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { BackgroundFX } from "@/components/background/BackgroundFX";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { useAuth } from "@/hooks/useAuth";
@@ -44,7 +43,6 @@ function DashboardLayout() {
 
   return (
     <>
-      <BackgroundFX />
       <div className="dashboard-container">
         <div
           className={`sidebar-overlay${mobileOpen ? " active" : ""}`}
@@ -77,7 +75,9 @@ function DashboardLayout() {
         </button>
         <main className={`main-content${collapsed ? " collapsed" : ""}`}>
           <Topbar user={user} title={title} onLogout={logout} />
-          <Outlet />
+          <div className="dashboard-content-card">
+            <Outlet />
+          </div>
         </main>
       </div>
     </>
