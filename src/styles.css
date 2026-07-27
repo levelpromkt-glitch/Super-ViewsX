@@ -29,8 +29,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .bg-radar-wrapper { position: absolute; top: 0; left: 0; right: 0; height: 110vh; overflow: hidden; pointer-events: none; z-index: 0; mask-image: linear-gradient(to bottom, black 40%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%); }
 .bg-animation { position: absolute; inset: 0; z-index: 0; background: var(--bg-main); pointer-events: none; }
 .radar-svg { width: 100%; height: 100%; position: absolute; bottom: 0; left: 0; z-index: 1; }
-.radar-lines { animation: spinRadar 200s linear infinite; transform-origin: 500px 850px; }
-.radar-nodes { animation: spinRadar 200s linear infinite; transform-origin: 500px 850px; }
+.radar-spin { animation: spinRadar 300s linear infinite; transform-origin: 500px 1100px; }
 @keyframes spinRadar { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
 .landing-navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(6, 9, 6, .72); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-bottom: 1px solid var(--border-soft); padding: 0 28px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
