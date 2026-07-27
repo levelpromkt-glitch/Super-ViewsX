@@ -250,18 +250,6 @@ function TopPlayersPage() {
             />
           </div>
           <div className="tp-field tp-field-period">
-            <label className="tp-field-label">Regra</label>
-            <select 
-              className="hs-input" 
-              value={matchMode} 
-              onChange={e => setMatchMode(e.target.value as MatchMode)}
-              style={{ backgroundColor: 'transparent', height: 42, color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <option value="AND">AND (As Duas)</option>
-              <option value="OR">OR (Qualquer Uma)</option>
-            </select>
-          </div>
-          <div className="tp-field tp-field-period">
             <label className="tp-field-label">Período</label>
             <div className="hs-period" ref={periodRef}>
               <button
