@@ -151,8 +151,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .nav-item span { flex: 1; transition: transform var(--transition); }
 .nav-item:hover { background: var(--bg-hover); color: var(--text-main); }
 .nav-item.nav-item-campanhas { background: rgba(158, 255, 46, 0.04); position: relative; overflow: visible; }
-.nav-item.nav-item-campanhas::before { content: ""; position: absolute; inset: 0; border-radius: 999px; padding: 1.5px; background: linear-gradient(75deg, transparent 50%, var(--primary-lime) 80%, var(--primary-green) 100%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
-.nav-item.nav-item-campanhas::after { content: ""; position: absolute; top: 0; right: 20px; width: 60px; height: 1px; background: var(--primary-lime); filter: blur(4px); pointer-events: none; }
+.nav-item.nav-item-campanhas::before { content: ""; position: absolute; inset: 0; border-radius: 999px; padding: 1.5px; background: linear-gradient(110deg, transparent 15%, rgba(158,255,46,0.2) 35%, var(--primary-lime) 50%, var(--primary-green) 65%, transparent 85%); background-size: 300% 300%; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; animation: neonPan 4s linear infinite; }
+@keyframes neonPan { 0% { background-position: 200% 50%; } 100% { background-position: -100% 50%; } }
+.nav-item.nav-item-campanhas::after { content: ""; position: absolute; top: 0; right: 20px; width: 60px; height: 1px; background: var(--primary-lime); filter: blur(4px); pointer-events: none; animation: neonGlowMove 4s linear infinite; }
+@keyframes neonGlowMove { 0% { right: -10px; opacity: 0; } 15% { opacity: 1; } 50% { right: 80%; opacity: 0; } 100% { right: 80%; opacity: 0; } }
 .nav-item.nav-item-campanhas span { text-shadow: 0 0 10px rgba(158, 255, 46, 0.6), 0 0 20px rgba(56, 224, 123, 0.3); font-weight: 700; color: #fff; }
 .nav-item.nav-item-campanhas .nav-icon { color: var(--primary-lime); filter: drop-shadow(0 0 6px rgba(158, 255, 46, 0.8)); }
 .nav-item:hover span { transform: translateX(4px); }
