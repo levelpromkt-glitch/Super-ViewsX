@@ -26,10 +26,9 @@
 body { font-family: 'Inter', sans-serif; background: var(--bg-main); color: var(--text-main); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-feature-settings: "cv11","ss01"; letter-spacing: -.005em; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
-.bg-matrix-wrapper { position: absolute; top: 0; left: 0; right: 0; height: 110vh; overflow: hidden; pointer-events: none; z-index: 0; mask-image: linear-gradient(to bottom, black 40%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%); }
-.bg-matrix-wrapper::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 30%, var(--bg-main) 100%); pointer-events: none; z-index: 2; }
-.bg-animation { position: absolute; inset: 0; z-index: 0; background: var(--bg-main); pointer-events: none; }
-.matrix-canvas { width: 100%; height: 100%; display: block; opacity: 0.4; }
+.bg-pattern-wrapper { position: absolute; top: 0; left: 0; right: 0; height: 110vh; overflow: hidden; pointer-events: none; z-index: 0; background: var(--bg-main); }
+.bg-dot-grid { position: absolute; inset: 0; background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px); background-size: 24px 24px; background-position: center; }
+.bg-gradient-fade { position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, transparent 0%, var(--bg-main) 100%); opacity: 0.9; }
 
 .landing-navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(6, 9, 6, .72); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-bottom: 1px solid var(--border-soft); padding: 0 28px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
 .landing-navbar .logo-area { display: flex; align-items: center; gap: 10px; text-decoration: none; }
