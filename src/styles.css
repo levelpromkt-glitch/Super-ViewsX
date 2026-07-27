@@ -155,8 +155,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .nav-item.nav-item-campanhas::after { content: ""; position: absolute; top: 50%; left: 50%; width: 250%; height: 500%; background: conic-gradient(from 0deg at 50% 50%, transparent 65%, var(--primary-lime) 85%, transparent 100%); animation: spinBorder 3s linear infinite; transform: translate(-50%, -50%); z-index: 0; }
 @keyframes spinBorder { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
 .nav-item.nav-item-campanhas > span, .nav-item.nav-item-campanhas > svg { position: relative; z-index: 2; }
-.nav-item.nav-item-campanhas span { text-shadow: 0 0 10px rgba(158, 255, 46, 0.6), 0 0 20px rgba(56, 224, 123, 0.3); font-weight: 700; color: #fff; }
-.nav-item.nav-item-campanhas .nav-icon { color: var(--primary-lime); filter: drop-shadow(0 0 6px rgba(158, 255, 46, 0.8)); }
+.nav-item.nav-item-campanhas span { font-weight: 700; color: #fff; }
+.nav-item.nav-item-campanhas .nav-icon { color: var(--primary-lime); }
 .nav-item:hover span { transform: translateX(4px); }
 .nav-item:hover .nav-icon { color: var(--primary-lime); transform: scale(1.1); filter: drop-shadow(0 0 4px rgba(158, 255, 46, 0.3)); }
 .nav-item.active { background: rgba(158, 255, 46, 0.08); color: var(--text-main); border: 1px solid rgba(158, 255, 46, 0.15); }
