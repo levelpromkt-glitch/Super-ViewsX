@@ -60,19 +60,14 @@ export function BackgroundFX() {
       for (let i = 0; i < currentCols; i++) {
         const text = chars[Math.floor(Math.random() * chars.length)];
         
-        // Head of the drop is white-ish, tail is theme green
+        // Head of the drop is slightly brighter, tail is very faded
         if (Math.random() > 0.95) {
-          ctx.fillStyle = '#fff';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#fff';
+          ctx.fillStyle = 'rgba(158, 255, 46, 0.8)'; // Softer head
         } else {
-          ctx.fillStyle = 'rgba(158, 255, 46, 0.9)'; // Primary Lime
-          ctx.shadowBlur = 5;
-          ctx.shadowColor = 'rgba(158, 255, 46, 0.5)';
+          ctx.fillStyle = 'rgba(158, 255, 46, 0.3)'; // Very faded tail
         }
 
         ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-        ctx.shadowBlur = 0; // reset for performance
 
         if (drops[i] * fontSize > height && Math.random() > 0.975) {
           drops[i] = 0;
