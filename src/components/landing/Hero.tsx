@@ -51,11 +51,16 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
         </button>
       </div>
 
-      <div className="shorts-feed" aria-hidden="true">
-        <div className="shorts-marquee">
-          {[...clips, ...clips].map((clip, i) => (
-            <ShortCard clip={clip} key={i} />
-          ))}
+      <div className="shorts-feed-wrapper">
+        <div className="hero-eclipse-container">
+          <div className="hero-eclipse-core" />
+        </div>
+        <div className="shorts-feed" aria-hidden="true">
+          <div className="shorts-marquee">
+            {[...clips, ...clips].map((clip, i) => (
+              <ShortCard clip={clip} key={i} />
+            ))}
+          </div>
         </div>
       </div>
     </main>
