@@ -21,7 +21,6 @@ export function TranscricaoSection() {
       <div className="trsc-split">
         {/* Left: visual illustration */}
         <div className="trsc-visual">
-          <div className="trsc-glow" />
           <div className="trsc-frame">
             <div className="vz-macbar">
               <div className="vz-macdots">

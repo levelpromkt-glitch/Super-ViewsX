@@ -204,7 +204,6 @@ export function HashtagSection() {
       </div>
 
       <div className="hd2-wrap">
-        <div className="hd2-glow" />
         <div className="vz-frame hd2-frame">
           <HashtagDemo />
         </div>
