@@ -33,11 +33,47 @@ function ShortCard({ clip }: { clip: Clip }) {
   );
 }
 
-
-
 export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
     <main className="landing">
+      <div className="hero-orbits" aria-hidden="true">
+        <div className="orbit orbit-1">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span
+              key={`o1-${i}`}
+              className="orbit-dot"
+              style={{
+                animationDelay: i === 0 ? "0s" : `${-(i * 2.16).toFixed(2)}s`,
+                opacity: [0.5, 0.6, 0.7, 0.55][i % 4],
+              }}
+            />
+          ))}
+        </div>
+        <div className="orbit orbit-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span
+              key={`o2-${i}`}
+              className="orbit-dot"
+              style={{
+                animationDelay: i === 0 ? "0s" : `${-(i * 2.5).toFixed(2)}s`,
+                opacity: [0.5, 0.6, 0.7, 0.55][i % 4],
+              }}
+            />
+          ))}
+        </div>
+        <div className="orbit orbit-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <span
+              key={`o3-${i}`}
+              className="orbit-dot"
+              style={{
+                animationDelay: i === 0 ? "0s" : `${-(i * 2.8).toFixed(2)}s`,
+                opacity: [0.5, 0.6, 0.7, 0.55][i % 4],
+              }}
+            />
+          ))}
+        </div>
+      </div>
       <h1 className="title hero-headline-anim">
         Use a força do algoritmo e <span className="title-glow"><span className="highlight">exploda</span></span> suas visualizações
       </h1>
@@ -53,13 +89,11 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
         </button>
       </div>
 
-      <div className="shorts-feed-wrapper">
-        <div className="shorts-feed" aria-hidden="true">
-          <div className="shorts-marquee">
-            {[...clips, ...clips].map((clip, i) => (
-              <ShortCard clip={clip} key={i} />
-            ))}
-          </div>
+      <div className="shorts-feed" aria-hidden="true">
+        <div className="shorts-marquee">
+          {[...clips, ...clips].map((clip, i) => (
+            <ShortCard clip={clip} key={i} />
+          ))}
         </div>
       </div>
     </main>
