@@ -1144,26 +1144,23 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   width: 100%;
   margin-top: 24px;
 }
-.black-hole-container {
+.radar-glow-container {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translate(-50%, calc(-100% + 15px)); /* overlap slightly */
-  width: 1200px;
-  max-width: 150vw;
+  transform: translate(-50%, -100%); /* Sits perfectly on top edge of the cards */
+  width: 100vw;
+  max-width: 1200px;
   z-index: 10;
   pointer-events: none;
-  animation: pulseBlackHole 3s ease-in-out infinite alternate;
+  mask-image: radial-gradient(circle at 50% 100%, black 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(circle at 50% 100%, black 20%, transparent 80%);
 }
-.black-hole-svg {
+.radar-glow-svg {
   width: 100%;
   height: auto;
   display: block;
   overflow: hidden;
-}
-@keyframes pulseBlackHole {
-  0% { opacity: 0.85; transform: translate(-50%, calc(-100% + 15px)) scale(0.98); }
-  100% { opacity: 1; transform: translate(-50%, calc(-100% + 15px)) scale(1.02); }
 }
 
 .shorts-feed { width: 100%; max-width: 980px; margin: 0 auto; overflow: hidden; animation: fadeUp .9s ease .55s forwards; opacity: 0; mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); }

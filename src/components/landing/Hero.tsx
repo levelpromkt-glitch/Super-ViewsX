@@ -33,59 +33,54 @@ function ShortCard({ clip }: { clip: Clip }) {
   );
 }
 
-const BlackHoleGlow = () => (
-  <div className="black-hole-container">
-    <svg className="black-hole-svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax meet">
+const RadarGlow = () => (
+  <div className="radar-glow-container">
+    <svg className="radar-glow-svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax meet">
       <defs>
-        <filter id="bh-glow-intense" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="25" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="bh-glow-medium" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="12" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="bh-glow-soft" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="4" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <linearGradient id="bh-horizon" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#ff3300" stopOpacity="0" />
-          <stop offset="25%" stopColor="#ff6600" stopOpacity="0.8" />
-          <stop offset="45%" stopColor="#ffcc00" stopOpacity="1" />
-          <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
-          <stop offset="55%" stopColor="#ffcc00" stopOpacity="1" />
-          <stop offset="75%" stopColor="#ff6600" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#ff3300" stopOpacity="0" />
-        </linearGradient>
+        <radialGradient id="radar-center-glow" cx="50%" cy="100%" r="60%">
+          <stop offset="0%" stopColor="#9eff2e" stopOpacity="0.12" />
+          <stop offset="30%" stopColor="#9eff2e" stopOpacity="0.04" />
+          <stop offset="100%" stopColor="#9eff2e" stopOpacity="0" />
+        </radialGradient>
       </defs>
       
-      {/* The massive horizontal accretion disk */}
-      <ellipse cx="600" cy="400" rx="550" ry="25" fill="url(#bh-horizon)" filter="url(#bh-glow-intense)" />
-      <ellipse cx="600" cy="400" rx="400" ry="10" fill="#ffffff" filter="url(#bh-glow-medium)" />
+      {/* Center soft glow */}
+      <rect x="0" y="0" width="1200" height="400" fill="url(#radar-center-glow)" />
+
+      {/* Concentric rings */}
+      <g stroke="#9eff2e" strokeWidth="1" strokeOpacity="0.15" fill="none">
+        <circle cx="600" cy="400" r="120" />
+        <circle cx="600" cy="400" r="220" />
+        <circle cx="600" cy="400" r="320" />
+        <circle cx="600" cy="400" r="440" />
+        <circle cx="600" cy="400" r="580" />
+      </g>
       
-      {/* Outer faint rings */}
-      <circle cx="600" cy="400" r="280" fill="none" stroke="#ff3300" strokeWidth="1" strokeOpacity="0.5" />
-      <circle cx="600" cy="400" r="220" fill="none" stroke="#ff6600" strokeWidth="2" strokeOpacity="0.7" filter="url(#bh-glow-soft)"/>
-      
-      {/* The main bright arch */}
-      <circle cx="600" cy="400" r="140" fill="none" stroke="#ff7700" strokeWidth="40" filter="url(#bh-glow-intense)" />
-      <circle cx="600" cy="400" r="130" fill="none" stroke="#ffcc00" strokeWidth="20" filter="url(#bh-glow-medium)" />
-      <circle cx="600" cy="400" r="125" fill="none" stroke="#ffffff" strokeWidth="8" filter="url(#bh-glow-soft)" />
-      
-      {/* Inner orange glow / dark core */}
-      <circle cx="600" cy="400" r="80" fill="#ff5500" filter="url(#bh-glow-intense)" />
-      <circle cx="600" cy="400" r="45" fill="#000000" />
+      {/* Orbiting dots */}
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="360 600 400" dur="20s" repeatCount="indefinite" />
+        <circle cx="480" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="45 600 400" to="405 600 400" dur="30s" repeatCount="indefinite" />
+        <circle cx="380" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+        <circle cx="820" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="-360 600 400" dur="40s" repeatCount="indefinite" />
+        <circle cx="280" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+        <circle cx="920" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="90 600 400" to="450 600 400" dur="50s" repeatCount="indefinite" />
+        <circle cx="160" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+        <circle cx="1040" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="-360 600 400" dur="65s" repeatCount="indefinite" />
+        <circle cx="20" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+        <circle cx="1180" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
+      </g>
     </svg>
   </div>
 );
