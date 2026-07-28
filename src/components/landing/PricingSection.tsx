@@ -28,7 +28,7 @@ const plans: PricingPlan[] = [
     key: "start",
     name: "Start",
     price: "R$ 47/mês",
-    cta: "Assinar Start",
+    cta: "Selecionar Plano",
     features: [
       "250 créditos por mês", 
       "Acesso aos Templates", 
@@ -42,7 +42,7 @@ const plans: PricingPlan[] = [
     name: "Pro",
     price: "R$ 97/mês",
     badge: "Mais Popular",
-    cta: "Assinar Pro",
+    cta: "Selecionar Plano",
     features: [
       "1.000 créditos por mês", 
       "Mineração avançada ilimitada", 

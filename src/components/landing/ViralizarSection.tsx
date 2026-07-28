@@ -140,13 +140,9 @@ export function ViralizarSection({ onOpenAuth }: { onOpenAuth?: () => void }) {
           ))}
         </ol>
 
-        <div className="hero-cta vz-cta">
+        <div className="hero-cta vz-cta" style={{ marginBottom: '40px' }}>
           <button type="button" className="btn-primary-nav hero-cta-primary" onClick={onOpenAuth}>
-            Começar Grátis <ArrowRight size={16} />
-          </button>
-
-          <button type="button" className="btn-outline hero-cta-ghost" onClick={onOpenAuth}>
-            Entrar
+            QUERO COMEÇAR A GANHAR DINHEIRO <ArrowRight size={16} />
           </button>
         </div>
       </div>
