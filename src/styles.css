@@ -3521,23 +3521,11 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   /* Espionagem — moldura consistente com demais seções */
   .tp-visual .vz-frame { padding: 8px; }
 
-  /* ====== Ferramentas Poderosas (Como Funciona) — fundo branco no mobile ====== */
-  #como-funciona { background: #ffffff; border-radius: 20px; padding: 40px 16px; margin: 0 12px; box-shadow: 0 12px 40px -12px rgba(0,0,0,.35); }
-  #como-funciona .lp-eyebrow { color: var(--primary-green, #38e07b); }
-  #como-funciona .lp-section-title { color: #0b1210; }
-  #como-funciona .lp-section-sub { color: #4a5560; }
+  /* ====== Ferramentas Poderosas (Como Funciona) ====== */
   #como-funciona .cf-grid { padding: 16px 4px 4px; gap: 10px; }
   #como-funciona .cf-mesh { display: none; }
-  #como-funciona .cf-card { background: #f5f8f5 !important; border: 1px solid rgba(11,18,16,.08) !important; box-shadow: 0 4px 14px -8px rgba(0,0,0,.15); }
-  #como-funciona .cf-card:hover { border-color: rgba(158,255,46,.55) !important; background: #fff !important; }
-  #como-funciona .cf-card-num { color: rgba(11,18,16,.18); -webkit-text-fill-color: currentColor; background: none; }
-  #como-funciona .cf-card-title { color: #0b1210; }
 
-  /* ====== Mineração Automática (Hashtag) — fundo branco + quebra + espaçamento ====== */
-  #pesquisar-hashtag { background: #ffffff; border-radius: 20px; padding: 40px 14px; margin: 0 12px; box-shadow: 0 12px 40px -12px rgba(0,0,0,.35); }
-  #pesquisar-hashtag .lp-eyebrow { color: var(--primary-green, #38e07b); }
-  #pesquisar-hashtag .lp-section-title { color: #0b1210; }
-  /* Forçar a quebra exata: "Pare de tentar a sorte e" / "poste apenas o que vai viralizar" */
+  /* ====== Mineração Automática (Hashtag) ====== */
   #pesquisar-hashtag .lp-section-title .lp-accent { display: block; }
   #pesquisar-hashtag .hd2-head { margin-bottom: 14px !important; gap: 8px; }
   #pesquisar-hashtag .hd2-wrap { margin-top: 4px; }
