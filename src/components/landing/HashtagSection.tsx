@@ -94,9 +94,9 @@ function HashtagDemo() {
   }, [inView]);
 
   const videos = [
-    { views: "2.4M", title: "Cortes de Podcast", thumb: "/podcast-corte.jpg" },
-    { views: "1.8M", title: "Gameplay Viral", thumb: "/game-cortes.jpg" },
-    { views: "980k", title: "Fitness Motivation", thumb: "/fitness-brasil.jpg" },
+    { views: "2.4M", title: "Corte viral #1" },
+    { views: "1.8M", title: "Corte viral #2" },
+    { views: "980k", title: "Corte viral #3" },
   ];
 
   return (
@@ -156,10 +156,8 @@ function HashtagDemo() {
                   data-hover={selIdx === i}
                   data-click={selClick === i}
                 >
-                  <div className="hd2-video-thumb" style={{ backgroundImage: `url(${v.thumb})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                    <div className="hd2-play-overlay">
-                      <Play size={16} fill="currentColor" />
-                    </div>
+                  <div className="hd2-video-thumb">
+                    <Play size={16} />
                   </div>
                   <div className="hd2-video-meta">
                     <span className="hd2-video-title">{v.title}</span>
