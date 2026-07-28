@@ -25,9 +25,7 @@ export function LandingSections({ onOpenAuth }: { onOpenAuth: () => void }) {
       <TranscricaoSection />
       <TopPlayersSection />
       <TemplatesSection />
-      <div className="lp-marquee-strip" aria-hidden="true">
-        <Marquee items={marqueeItems} />
-      </div>
+
       <ComparisonSection />
       <PricingSection />
 
