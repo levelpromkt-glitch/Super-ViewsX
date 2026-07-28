@@ -2995,8 +2995,6 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
 /* ===== Templates Premium (landing) ===== */
 .tmpl-premium {
   position: relative;
-  padding-top: 96px;
-  padding-bottom: 96px;
 }
 .tmpl-premium-inner {
   position: relative;
@@ -3530,7 +3528,7 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   #pesquisar-hashtag .hd2-wrap { margin-top: 4px; }
 
   /* ====== Templates — restaurar profundidade visual e ajustar espaçamentos no mobile ====== */
-  .tmpl-premium { padding-top: 64px !important; padding-bottom: 56px !important; }
+  .tmpl-premium { padding: 0 !important; }
   .tmpl-premium-inner { padding: 0 20px !important; margin-bottom: 32px !important; }
   .tmpl-premium-head { gap: 12px; }
   .tmpl-premium-eyebrow { margin-bottom: 14px; }
@@ -3570,7 +3568,7 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
 
 /* ===== Templates mobile — faithful miniature of desktop ===== */
 @media (max-width: 640px) {
-  .tmpl-premium { padding-top: 72px !important; padding-bottom: 64px !important; }
+  .tmpl-premium { padding: 0 !important; }
   .tmpl-premium-inner { padding: 0 18px !important; margin-bottom: 20px !important; }
   .tmpl-premium-head { gap: 10px; max-width: 92%; margin: 0 auto; }
   .tmpl-premium-title { font-size: clamp(1.35rem, 5.4vw, 1.75rem) !important; text-wrap: balance; }
