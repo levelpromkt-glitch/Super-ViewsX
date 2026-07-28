@@ -33,41 +33,7 @@ function ShortCard({ clip }: { clip: Clip }) {
   );
 }
 
-const RadarGlow = () => (
-  <div className="hero-radar-bg">
-    {/* Central Breathe Glow */}
-    <div className="hero-radar-glow" />
-    
-    {/* Radar Arcs & Dots */}
-    <div className="hero-radar-arcs">
-      <div className="hero-radar-arc" style={{ width: '300px', height: '300px' }}>
-        <div className="hero-radar-dot-wrapper ring-1" style={{ animationDelay: '-12s' }}>
-          <div className="hero-radar-dot" />
-        </div>
-      </div>
-      <div className="hero-radar-arc" style={{ width: '600px', height: '600px' }}>
-        <div className="hero-radar-dot-wrapper ring-2" style={{ animationDelay: '-25s' }}>
-          <div className="hero-radar-dot" />
-        </div>
-      </div>
-      <div className="hero-radar-arc" style={{ width: '900px', height: '900px' }}>
-        <div className="hero-radar-dot-wrapper ring-3" style={{ animationDelay: '-7s' }}>
-          <div className="hero-radar-dot" />
-        </div>
-      </div>
-      <div className="hero-radar-arc" style={{ width: '1200px', height: '1200px' }}>
-        <div className="hero-radar-dot-wrapper ring-4" style={{ animationDelay: '-38s' }}>
-          <div className="hero-radar-dot" />
-        </div>
-      </div>
-      <div className="hero-radar-arc arc-5" style={{ width: '1500px', height: '1500px' }}>
-        <div className="hero-radar-dot-wrapper ring-5" style={{ animationDelay: '-19s' }}>
-          <div className="hero-radar-dot" />
-        </div>
-      </div>
-    </div>
-  </div>
-);
+
 
 export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
@@ -88,7 +54,6 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
       </div>
 
       <div className="shorts-feed-wrapper">
-        <RadarGlow />
         <div className="shorts-feed" aria-hidden="true">
           <div className="shorts-marquee">
             {[...clips, ...clips].map((clip, i) => (
