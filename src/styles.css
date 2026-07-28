@@ -1167,7 +1167,7 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   .shorts-marquee { gap: 10px; animation-duration: 45s; }
 }
 
-.lp-sections { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; display: flex; flex-direction: column; gap: 80px; }
+.lp-sections { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; display: flex; flex-direction: column; gap: 48px; }
 .lp-section { display: flex; flex-direction: column; gap: 32px; }
 .lp-section-head { text-align: center; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
 .lp-eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--primary-lime); }
