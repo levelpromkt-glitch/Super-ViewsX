@@ -18,23 +18,27 @@ const plans: PricingPlan[] = [
     price: "Grátis",
     cta: "Começar Grátis",
     features: [
-      "15 créditos iniciais", 
-      "Mineração básica", 
-      "Marca d'água nos vídeos"
+      "5 créditos de boas-vindas", 
+      "Acesso a Todas as Competições", 
+      "2 Templates básicos",
+      "Pesquisa de Hashtag e Transcrição",
+      "Download de cortes (Bloqueado)",
+      "Top Players (Bloqueado)"
     ],
     icon: Sparkles,
   },
   {
     key: "pro",
     name: "Pro",
-    price: "R$ 97/mês",
+    price: "R$ 59,97/mês",
     badge: "Mais Popular",
     cta: "Selecionar Plano",
     features: [
-      "1.000 créditos por mês", 
-      "Mineração avançada ilimitada", 
-      "Templates VIP exclusivos",
-      "Acesso ao grupo de networking"
+      "120 créditos / mês (não cumulativos)", 
+      "Acesso a Todas as Competições", 
+      "TODOS os Templates disponíveis",
+      "Download de cortes ilimitado",
+      "Acesso total à Função Top Players"
     ],
     featured: true,
     icon: Crown,
@@ -42,13 +46,14 @@ const plans: PricingPlan[] = [
   {
     key: "start",
     name: "Start",
-    price: "R$ 47/mês",
+    price: "R$ 37,90/mês",
     cta: "Selecionar Plano",
     features: [
-      "250 créditos por mês", 
-      "Acesso aos Templates", 
-      "Download sem marca d'água",
-      "Suporte prioritário"
+      "55 créditos / mês (não cumulativos)", 
+      "Acesso a Todas as Competições", 
+      "20 Templates desbloqueados",
+      "Download de cortes liberado",
+      "Top Players (Bloqueado)"
     ],
     icon: Rocket,
   },
