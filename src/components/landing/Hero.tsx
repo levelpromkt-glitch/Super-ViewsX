@@ -34,38 +34,36 @@ function ShortCard({ clip }: { clip: Clip }) {
 }
 
 const RadarGlow = () => (
-  <div className="cakto-radar-wrapper">
-    <div className="cakto-radar-container">
-      {/* Soft central green glow */}
-      <div className="cakto-radar-glow" />
-      
-      {/* Rings that rotate */}
-      <div className="cakto-ring-group ring-group-1" style={{ width: '280px', height: '280px' }}>
-        <div className="cakto-ring" />
+  <div className="hero-radar-bg">
+    {/* Central Breathe Glow */}
+    <div className="hero-radar-glow" />
+    
+    {/* Radar Arcs & Dots */}
+    <div className="hero-radar-arcs">
+      <div className="hero-radar-arc" style={{ width: '300px', height: '300px' }}>
+        <div className="hero-radar-dot-wrapper ring-1" style={{ animationDelay: '-12s' }}>
+          <div className="hero-radar-dot" />
+        </div>
       </div>
-      <div className="cakto-ring-group ring-group-2" style={{ width: '560px', height: '560px' }}>
-        <div className="cakto-ring" />
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(20deg)' }}><div className="cakto-dot" /></div>
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(200deg)' }}><div className="cakto-dot" /></div>
+      <div className="hero-radar-arc" style={{ width: '600px', height: '600px' }}>
+        <div className="hero-radar-dot-wrapper ring-2" style={{ animationDelay: '-25s' }}>
+          <div className="hero-radar-dot" />
+        </div>
       </div>
-      <div className="cakto-ring-group ring-group-3" style={{ width: '840px', height: '840px' }}>
-        <div className="cakto-ring" />
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(90deg)' }}><div className="cakto-dot" /></div>
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(270deg)' }}><div className="cakto-dot" /></div>
+      <div className="hero-radar-arc" style={{ width: '900px', height: '900px' }}>
+        <div className="hero-radar-dot-wrapper ring-3" style={{ animationDelay: '-7s' }}>
+          <div className="hero-radar-dot" />
+        </div>
       </div>
-      <div className="cakto-ring-group ring-group-4" style={{ width: '1120px', height: '1120px' }}>
-        <div className="cakto-ring" />
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(45deg)' }}><div className="cakto-dot" /></div>
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(135deg)' }}><div className="cakto-dot" /></div>
+      <div className="hero-radar-arc" style={{ width: '1200px', height: '1200px' }}>
+        <div className="hero-radar-dot-wrapper ring-4" style={{ animationDelay: '-38s' }}>
+          <div className="hero-radar-dot" />
+        </div>
       </div>
-      <div className="cakto-ring-group ring-group-5" style={{ width: '1400px', height: '1400px' }}>
-        <div className="cakto-ring" />
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(110deg)' }}><div className="cakto-dot" /></div>
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(290deg)' }}><div className="cakto-dot" /></div>
-      </div>
-      <div className="cakto-ring-group ring-group-6" style={{ width: '1680px', height: '1680px' }}>
-        <div className="cakto-ring" />
-        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(15deg)' }}><div className="cakto-dot" /></div>
+      <div className="hero-radar-arc arc-5" style={{ width: '1500px', height: '1500px' }}>
+        <div className="hero-radar-dot-wrapper ring-5" style={{ animationDelay: '-19s' }}>
+          <div className="hero-radar-dot" />
+        </div>
       </div>
     </div>
   </div>
