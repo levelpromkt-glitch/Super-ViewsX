@@ -74,6 +74,12 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
           ))}
         </div>
       </div>
+      <div className="hero-badge-wrap">
+        <div className="hero-badge">
+          <img src="/SIMBOL SUPER VIEWS BRANCO.png" alt="Super Views" className="hero-badge-icon" />
+          <span>Conteúdo Viral infinito</span>
+        </div>
+      </div>
       <h1 className="title">
         <span className="anim-word" style={{ animationDelay: '0s' }}>Use</span>{" "}
         <span className="anim-word" style={{ animationDelay: '0.08s' }}>a</span>{" "}

@@ -16,27 +16,41 @@ const plans: PricingPlan[] = [
     key: "free",
     name: "Free",
     price: "Grátis",
-    cta: "Começar grátis",
-    features: ["Acesso inicial", "Créditos limitados", "Templates básicos"],
+    cta: "Começar Grátis",
+    features: [
+      "15 créditos iniciais", 
+      "Mineração básica", 
+      "Marca d'água nos vídeos"
+    ],
     icon: Sparkles,
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "R$ 99,90/mês",
-    badge: "Mais popular",
-    cta: "Escolher Pro",
-    features: ["Todos os recursos", "Maior limite de uso", "Recursos avançados"],
-    featured: true,
-    icon: Crown,
   },
   {
     key: "start",
     name: "Start",
-    price: "R$ 49,90/mês",
-    cta: "Escolher Start",
-    features: ["Mais créditos", "Mais ferramentas", "Mais templates"],
+    price: "R$ 47/mês",
+    cta: "Assinar Start",
+    features: [
+      "250 créditos por mês", 
+      "Acesso aos Templates", 
+      "Download sem marca d'água",
+      "Suporte prioritário"
+    ],
     icon: Rocket,
+  },
+  {
+    key: "pro",
+    name: "Pro",
+    price: "R$ 97/mês",
+    badge: "Mais Popular",
+    cta: "Assinar Pro",
+    features: [
+      "1.000 créditos por mês", 
+      "Mineração avançada ilimitada", 
+      "Templates VIP exclusivos",
+      "Acesso ao grupo de networking"
+    ],
+    featured: true,
+    icon: Crown,
   },
 ];
 
