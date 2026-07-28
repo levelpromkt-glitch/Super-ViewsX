@@ -25,19 +25,6 @@ const plans: PricingPlan[] = [
     icon: Sparkles,
   },
   {
-    key: "start",
-    name: "Start",
-    price: "R$ 47/mês",
-    cta: "Selecionar Plano",
-    features: [
-      "250 créditos por mês", 
-      "Acesso aos Templates", 
-      "Download sem marca d'água",
-      "Suporte prioritário"
-    ],
-    icon: Rocket,
-  },
-  {
     key: "pro",
     name: "Pro",
     price: "R$ 97/mês",
@@ -51,6 +38,19 @@ const plans: PricingPlan[] = [
     ],
     featured: true,
     icon: Crown,
+  },
+  {
+    key: "start",
+    name: "Start",
+    price: "R$ 47/mês",
+    cta: "Selecionar Plano",
+    features: [
+      "250 créditos por mês", 
+      "Acesso aos Templates", 
+      "Download sem marca d'água",
+      "Suporte prioritário"
+    ],
+    icon: Rocket,
   },
 ];
 
