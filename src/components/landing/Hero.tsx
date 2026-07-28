@@ -34,54 +34,40 @@ function ShortCard({ clip }: { clip: Clip }) {
 }
 
 const RadarGlow = () => (
-  <div className="radar-glow-container">
-    <svg className="radar-glow-svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax meet">
-      <defs>
-        <radialGradient id="radar-center-glow" cx="50%" cy="100%" r="60%">
-          <stop offset="0%" stopColor="#9eff2e" stopOpacity="0.12" />
-          <stop offset="30%" stopColor="#9eff2e" stopOpacity="0.04" />
-          <stop offset="100%" stopColor="#9eff2e" stopOpacity="0" />
-        </radialGradient>
-      </defs>
+  <div className="cakto-radar-wrapper">
+    <div className="cakto-radar-container">
+      {/* Soft central green glow */}
+      <div className="cakto-radar-glow" />
       
-      {/* Center soft glow */}
-      <rect x="0" y="0" width="1200" height="400" fill="url(#radar-center-glow)" />
-
-      {/* Concentric rings */}
-      <g stroke="#9eff2e" strokeWidth="1" strokeOpacity="0.15" fill="none">
-        <circle cx="600" cy="400" r="120" />
-        <circle cx="600" cy="400" r="220" />
-        <circle cx="600" cy="400" r="320" />
-        <circle cx="600" cy="400" r="440" />
-        <circle cx="600" cy="400" r="580" />
-      </g>
-      
-      {/* Orbiting dots */}
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="360 600 400" dur="20s" repeatCount="indefinite" />
-        <circle cx="480" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-      </g>
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="45 600 400" to="405 600 400" dur="30s" repeatCount="indefinite" />
-        <circle cx="380" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-        <circle cx="820" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-      </g>
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="-360 600 400" dur="40s" repeatCount="indefinite" />
-        <circle cx="280" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-        <circle cx="920" cy="400" r="3" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-      </g>
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="90 600 400" to="450 600 400" dur="50s" repeatCount="indefinite" />
-        <circle cx="160" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-        <circle cx="1040" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-      </g>
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="0 600 400" to="-360 600 400" dur="65s" repeatCount="indefinite" />
-        <circle cx="20" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-        <circle cx="1180" cy="400" r="4" fill="#060906" stroke="#9eff2e" strokeOpacity="0.8" />
-      </g>
-    </svg>
+      {/* Rings that rotate */}
+      <div className="cakto-ring-group ring-group-1" style={{ width: '280px', height: '280px' }}>
+        <div className="cakto-ring" />
+      </div>
+      <div className="cakto-ring-group ring-group-2" style={{ width: '560px', height: '560px' }}>
+        <div className="cakto-ring" />
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(20deg)' }}><div className="cakto-dot" /></div>
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(200deg)' }}><div className="cakto-dot" /></div>
+      </div>
+      <div className="cakto-ring-group ring-group-3" style={{ width: '840px', height: '840px' }}>
+        <div className="cakto-ring" />
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(90deg)' }}><div className="cakto-dot" /></div>
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(270deg)' }}><div className="cakto-dot" /></div>
+      </div>
+      <div className="cakto-ring-group ring-group-4" style={{ width: '1120px', height: '1120px' }}>
+        <div className="cakto-ring" />
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(45deg)' }}><div className="cakto-dot" /></div>
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(135deg)' }}><div className="cakto-dot" /></div>
+      </div>
+      <div className="cakto-ring-group ring-group-5" style={{ width: '1400px', height: '1400px' }}>
+        <div className="cakto-ring" />
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(110deg)' }}><div className="cakto-dot" /></div>
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(290deg)' }}><div className="cakto-dot" /></div>
+      </div>
+      <div className="cakto-ring-group ring-group-6" style={{ width: '1680px', height: '1680px' }}>
+        <div className="cakto-ring" />
+        <div className="cakto-dot-wrapper" style={{ transform: 'rotate(15deg)' }}><div className="cakto-dot" /></div>
+      </div>
+    </div>
   </div>
 );
 

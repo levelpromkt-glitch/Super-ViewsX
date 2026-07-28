@@ -1144,23 +1144,87 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   width: 100%;
   margin-top: 24px;
 }
-.radar-glow-container {
+.cakto-radar-wrapper {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translate(-50%, -100%); /* Sits perfectly on top edge of the cards */
+  transform: translate(-50%, -100%);
   width: 100vw;
-  max-width: 1200px;
+  height: 600px;
+  overflow: hidden; /* Clips bottom half to make semicircles */
   z-index: 10;
   pointer-events: none;
-  mask-image: radial-gradient(circle at 50% 100%, black 20%, transparent 80%);
-  -webkit-mask-image: radial-gradient(circle at 50% 100%, black 20%, transparent 80%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end; /* Center is exactly on bottom edge */
+  /* Fade edges so it doesn't look like a hard box */
+  mask-image: radial-gradient(ellipse at 50% 100%, black 10%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 100%, black 10%, transparent 70%);
 }
-.radar-glow-svg {
+
+.cakto-radar-container {
+  position: relative;
+  width: 0;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cakto-radar-glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle at center, rgba(158, 255, 46, 0.12) 0%, rgba(158, 255, 46, 0) 60%);
+  border-radius: 50%;
+  transform: translateY(50%); /* Moves glow center to bottom edge */
+}
+
+.cakto-ring-group {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Animations for each ring */
+.ring-group-1 { animation: spin 45s linear infinite; }
+.ring-group-2 { animation: spin 60s linear infinite reverse; }
+.ring-group-3 { animation: spin 75s linear infinite; }
+.ring-group-4 { animation: spin 90s linear infinite reverse; }
+.ring-group-5 { animation: spin 105s linear infinite; }
+.ring-group-6 { animation: spin 120s linear infinite reverse; }
+
+.cakto-ring {
+  position: absolute;
   width: 100%;
-  height: auto;
-  display: block;
-  overflow: hidden;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(158, 255, 46, 0.15); /* Very faint green line */
+}
+
+.cakto-dot-wrapper {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.cakto-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: #000;
+  border: 1px solid rgba(158, 255, 46, 0.8);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px rgba(158, 255, 46, 0.8); /* Slight glow on the dot */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .shorts-feed { width: 100%; max-width: 980px; margin: 0 auto; overflow: hidden; animation: fadeUp .9s ease .55s forwards; opacity: 0; mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); }
