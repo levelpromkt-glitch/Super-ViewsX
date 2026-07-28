@@ -33,6 +33,63 @@ function ShortCard({ clip }: { clip: Clip }) {
   );
 }
 
+const BlackHoleGlow = () => (
+  <div className="black-hole-container">
+    <svg className="black-hole-svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax meet">
+      <defs>
+        <filter id="bh-glow-intense" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="25" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="bh-glow-medium" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="12" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="bh-glow-soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="bh-horizon" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#ff3300" stopOpacity="0" />
+          <stop offset="25%" stopColor="#ff6600" stopOpacity="0.8" />
+          <stop offset="45%" stopColor="#ffcc00" stopOpacity="1" />
+          <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="55%" stopColor="#ffcc00" stopOpacity="1" />
+          <stop offset="75%" stopColor="#ff6600" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#ff3300" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      
+      {/* The massive horizontal accretion disk */}
+      <ellipse cx="600" cy="400" rx="550" ry="25" fill="url(#bh-horizon)" filter="url(#bh-glow-intense)" />
+      <ellipse cx="600" cy="400" rx="400" ry="10" fill="#ffffff" filter="url(#bh-glow-medium)" />
+      
+      {/* Outer faint rings */}
+      <circle cx="600" cy="400" r="280" fill="none" stroke="#ff3300" strokeWidth="1" strokeOpacity="0.5" />
+      <circle cx="600" cy="400" r="220" fill="none" stroke="#ff6600" strokeWidth="2" strokeOpacity="0.7" filter="url(#bh-glow-soft)"/>
+      
+      {/* The main bright arch */}
+      <circle cx="600" cy="400" r="140" fill="none" stroke="#ff7700" strokeWidth="40" filter="url(#bh-glow-intense)" />
+      <circle cx="600" cy="400" r="130" fill="none" stroke="#ffcc00" strokeWidth="20" filter="url(#bh-glow-medium)" />
+      <circle cx="600" cy="400" r="125" fill="none" stroke="#ffffff" strokeWidth="8" filter="url(#bh-glow-soft)" />
+      
+      {/* Inner orange glow / dark core */}
+      <circle cx="600" cy="400" r="80" fill="#ff5500" filter="url(#bh-glow-intense)" />
+      <circle cx="600" cy="400" r="45" fill="#000000" />
+    </svg>
+  </div>
+);
+
 export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
     <main className="landing">
@@ -52,9 +109,7 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
       </div>
 
       <div className="shorts-feed-wrapper">
-        <div className="hero-eclipse-container">
-          <div className="hero-eclipse-core" />
-        </div>
+        <BlackHoleGlow />
         <div className="shorts-feed" aria-hidden="true">
           <div className="shorts-marquee">
             {[...clips, ...clips].map((clip, i) => (

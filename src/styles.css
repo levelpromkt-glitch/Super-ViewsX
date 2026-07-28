@@ -1144,38 +1144,26 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   width: 100%;
   margin-top: 24px;
 }
-.hero-eclipse-container {
+.black-hole-container {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translateX(-50%);
-  width: 100vw;
-  height: 100%;
-  z-index: -1;
+  transform: translate(-50%, calc(-100% + 15px)); /* overlap slightly */
+  width: 1200px;
+  max-width: 150vw;
+  z-index: 10;
   pointer-events: none;
-  display: flex;
-  justify-content: center;
+  animation: pulseBlackHole 3s ease-in-out infinite alternate;
 }
-.hero-eclipse-core {
-  width: 70vw;
-  max-width: 800px;
-  height: 80px;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 
-    0 0 40px 10px #ffffff,
-    0 -40px 100px 40px #ffea00,
-    0 -80px 180px 80px #ff6600,
-    0 -120px 260px 120px rgba(200, 20, 0, 0.5);
-  filter: blur(15px);
-  position: absolute;
-  top: 0;
-  transform: translateY(-20%);
-  animation: pulseEclipse 4s ease-in-out infinite alternate;
+.black-hole-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: hidden;
 }
-@keyframes pulseEclipse {
-  0% { opacity: 0.8; transform: translateY(-20%) scaleY(0.9) scaleX(0.95); }
-  100% { opacity: 1; transform: translateY(-20%) scaleY(1.1) scaleX(1.05); }
+@keyframes pulseBlackHole {
+  0% { opacity: 0.85; transform: translate(-50%, calc(-100% + 15px)) scale(0.98); }
+  100% { opacity: 1; transform: translate(-50%, calc(-100% + 15px)) scale(1.02); }
 }
 
 .shorts-feed { width: 100%; max-width: 980px; margin: 0 auto; overflow: hidden; animation: fadeUp .9s ease .55s forwards; opacity: 0; mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); }
