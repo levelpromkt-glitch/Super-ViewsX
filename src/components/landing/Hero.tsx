@@ -104,7 +104,7 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
       </div>
 
       <div className="shorts-feed-wrapper">
-        <BlackHoleGlow />
+        <RadarGlow />
         <div className="shorts-feed" aria-hidden="true">
           <div className="shorts-marquee">
             {[...clips, ...clips].map((clip, i) => (
