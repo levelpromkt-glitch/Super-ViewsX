@@ -71,8 +71,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary-lime); animation: pulseDot 2s ease-in-out infinite; }
 @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.8); } }
 .title { font-size: clamp(1.8rem, 3.6vw, 2.6rem); font-weight: 800; line-height: 1.12; letter-spacing: -.025em; margin-bottom: 16px; animation: heroTitleIn .8s ease-out .1s forwards; opacity: 0; max-width: 860px; text-wrap: balance; }
-.anim-char { display: inline-block; opacity: 0; animation: charIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-@keyframes charIn { 0% { opacity: 0; filter: blur(8px); transform: translateY(12px) scale(0.92); } 100% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); } }
+.anim-word { display: inline-block; opacity: 0; animation: wordIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes wordIn { 0% { opacity: 0; filter: blur(12px); transform: translateY(20px); } 100% { opacity: 1; filter: blur(0); transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .title.hero-headline-anim { animation: none; opacity: 1; filter: none; transform: none; } }
 .title .highlight { background: linear-gradient(135deg, var(--primary-lime), var(--primary-green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; position: relative; }
 .title .highlight::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, var(--primary-lime), transparent); border-radius: 4px; opacity: .35; filter: blur(6px); }
