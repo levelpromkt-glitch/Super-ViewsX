@@ -1247,15 +1247,15 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
 .pricing-icon-featured { width: 64px; height: 64px; border-radius: 18px; background: rgba(158,255,46,.15); border: 2px solid var(--primary-lime); color: var(--primary-lime); box-shadow: inset 0 2px 0 rgba(255,255,255,.3), 0 0 40px rgba(158,255,46,.6); }
 .pricing-card:hover .pricing-icon { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.08); transform: scale(1.1); }
 .pricing-card-featured:hover .pricing-icon-featured { border-color: #C7FF7A; box-shadow: inset 0 2px 0 rgba(255,255,255,.4), 0 0 60px 0 rgba(158,255,46,.8); color: #fff; transform: scale(1.1); }
-.pricing-header { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.pricing-header { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .pricing-name { font-size: 1rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: #a1a1aa; }
-.pricing-card-featured .pricing-name { color: var(--primary-lime); text-shadow: 0 0 30px rgba(158,255,46,0.8); font-size: 1.1rem; }
-.pricing-price { font-size: 2.5rem; font-weight: 900; letter-spacing: -.04em; color: #fff; line-height: 1; }
-.pricing-card-featured .pricing-price { font-size: 3rem; text-shadow: 0 0 40px rgba(255,255,255,0.4); }
-.pricing-features { list-style: none; display: flex; flex-direction: column; gap: 18px; width: 100%; text-align: left; margin-top: 10px; }
-.pricing-feature { display: flex; align-items: center; gap: 14px; font-size: 1.05rem; font-weight: 500; color: #e4e4e7; }
-.pricing-check { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(158, 255, 46, .2); color: var(--primary-lime); flex-shrink: 0; border: 2px solid var(--primary-lime); box-shadow: 0 0 15px rgba(158,255,46,0.4); }
-.pricing-cta { width: 100%; margin-top: auto; padding: 18px 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); color: #fff; font-size: 1.05rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: all .3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 10px rgba(0,0,0,0.3); text-transform: uppercase; letter-spacing: 0.05em; }
+.pricing-card-featured .pricing-name { color: var(--primary-lime); text-shadow: 0 0 30px rgba(158,255,46,0.8); font-size: 1.05rem; }
+.pricing-price { font-size: 2.2rem; font-weight: 900; letter-spacing: -.04em; color: #fff; line-height: 1; }
+.pricing-card-featured .pricing-price { font-size: 2.5rem; text-shadow: 0 0 40px rgba(255,255,255,0.4); }
+.pricing-features { list-style: none; display: flex; flex-direction: column; gap: 12px; width: 100%; text-align: left; margin-top: 8px; }
+.pricing-feature { display: flex; align-items: center; gap: 10px; font-size: .95rem; font-weight: 500; color: #e4e4e7; }
+.pricing-check { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(158, 255, 46, .2); color: var(--primary-lime); flex-shrink: 0; border: 2px solid var(--primary-lime); box-shadow: 0 0 15px rgba(158,255,46,0.4); }
+.pricing-cta { width: 100%; margin-top: auto; padding: 14px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); color: #fff; font-size: 1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: all .3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 10px rgba(0,0,0,0.3); text-transform: uppercase; letter-spacing: 0.05em; }
 .pricing-cta:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.4); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
 .pricing-cta-primary { background: linear-gradient(180deg, #C7FF7A 0%, var(--primary-lime) 100%); border: none; color: #000; box-shadow: inset 0 2px 2px rgba(255,255,255,0.8), 0 10px 30px -5px rgba(158,255,46,0.8); }
 .pricing-cta-primary:hover { background: linear-gradient(180deg, #D4FF99 0%, #B0FF55 100%); border: none; transform: translateY(-2px) scale(1.02); box-shadow: inset 0 2px 2px rgba(255,255,255,0.9), 0 15px 40px -5px rgba(158,255,46,1); }
