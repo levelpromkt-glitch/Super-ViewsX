@@ -21,11 +21,49 @@ const clips: Clip[] = [
   { title: "Reação imperdível", views: "10.1M", img: "https://i.ibb.co/7d3ZVD7N/imgi-335-hq720-2.jpg", category: "Reação" },
 ];
 
+const AnimatedLetters = ({ text, delayOffset = 0 }: { text: string, delayOffset?: number }) => {
+  return (
+    <>
+      {text.split(" ").map((word, wordIndex, wordsArray) => {
+        const previousChars = wordsArray.slice(0, wordIndex).join(" ").length;
+        const wordOffset = delayOffset + previousChars + (wordIndex > 0 ? 1 : 0);
+        return (
+          <span key={wordIndex} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+            {word.split("").map((char, charIndex) => (
+              <span 
+                key={charIndex} 
+                className="anim-char" 
+                style={{ 
+                  animationDelay: `${(wordOffset + charIndex) * 0.03}s`,
+                  display: 'inline-block'
+                }}
+              >
+                {char}
+              </span>
+            ))}
+            {wordIndex < wordsArray.length - 1 && (
+              <span 
+                className="anim-char" 
+                style={{ 
+                  animationDelay: `${(wordOffset + word.length) * 0.03}s`,
+                  display: 'inline-block'
+                }}
+              >
+                &nbsp;
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+};
+
 function ShortCard({ clip }: { clip: Clip }) {
   return (
     <article className="short-card">
       <div className="short-thumb">
-        <img src={clip.img} alt="" loading="lazy" />
+        <img src={clip.img} alt="" loading="eager" fetchPriority="high" />
         <Play size={16} className="short-play" fill="currentColor" />
         <span className="short-views">{clip.views}</span>
       </div>
@@ -74,8 +112,28 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
           ))}
         </div>
       </div>
-      <h1 className="title hero-headline-anim">
-        Use a força do algoritmo e <span className="title-glow"><span className="highlight">exploda</span></span> suas visualizações
+      <h1 className="title">
+        <AnimatedLetters text="Use a força do algoritmo e " delayOffset={0} />
+        <span className="title-glow" style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+          <span className="highlight">
+            {"exploda".split("").map((char, charIndex) => (
+              <span 
+                key={charIndex} 
+                className="anim-char" 
+                style={{ 
+                  animationDelay: `${(27 + charIndex) * 0.03}s`,
+                  display: 'inline-block'
+                }}
+              >
+                {char}
+              </span>
+            ))}
+          </span>
+        </span>
+        <span style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+          <span className="anim-char" style={{ animationDelay: `${34 * 0.03}s`, display: 'inline-block' }}>&nbsp;</span>
+          <AnimatedLetters text="suas visualizações" delayOffset={35} />
+        </span>
       </h1>
       <p className="subtitle">
         Replique conteúdos que já estão viralizando
