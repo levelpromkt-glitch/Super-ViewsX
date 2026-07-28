@@ -3637,3 +3637,13 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   .tmpl-premium-glow { display: block; inset: -8% 0 -12% 0; filter: blur(60px); opacity: .9; }
 }
 
+/* ===== Landing Page Desktop Compact Mode ===== */
+@media (min-width: 1025px) {
+  .landing-navbar,
+  .landing,
+  .lp-sections,
+  .lp-footer {
+    zoom: 0.85;
+  }
+}
+
