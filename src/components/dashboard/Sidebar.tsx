@@ -114,9 +114,9 @@ export function Sidebar({
         <p className="upgrade-text">
           Acesso a ferramentas avançadas e recursos completos.
         </p>
-        <button type="button" className="btn-upgrade" aria-label="Fazer upgrade">
+        <Link to="/dashboard/planos" className="btn-upgrade" aria-label="Fazer upgrade" style={{ textDecoration: 'none' }}>
           Fazer upgrade <ArrowUpRight size={14} />
-        </button>
+        </Link>
       </div>
     </aside>
   );
