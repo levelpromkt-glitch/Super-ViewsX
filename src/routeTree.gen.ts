@@ -13,8 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
-import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
+import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
 import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
@@ -39,14 +39,14 @@ const DashboardAdminRoute = DashboardAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardPlanosRoute = DashboardPlanosRouteImport.update({
-  id: '/planos',
-  path: '/planos',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const DashboardHashtagRoute = DashboardHashtagRouteImport.update({
   id: '/hashtag',
   path: '/hashtag',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPlanosRoute = DashboardPlanosRouteImport.update({
+  id: '/planos',
+  path: '/planos',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardTemplatesRoute = DashboardTemplatesRouteImport.update({
@@ -69,8 +69,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
-  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -79,8 +79,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/admin': typeof DashboardAdminRoute
-  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -91,8 +91,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
-  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -104,8 +104,8 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/admin'
-    | '/dashboard/planos'
     | '/dashboard/hashtag'
+    | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -114,8 +114,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard/admin'
-    | '/dashboard/planos'
     | '/dashboard/hashtag'
+    | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -125,8 +125,8 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/admin'
-    | '/dashboard/planos'
     | '/dashboard/hashtag'
+    | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -168,18 +168,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAdminRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/planos': {
-      id: '/dashboard/planos'
-      path: '/planos'
-      fullPath: '/dashboard/planos'
-      preLoaderRoute: typeof DashboardPlanosRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/dashboard/hashtag': {
       id: '/dashboard/hashtag'
       path: '/hashtag'
       fullPath: '/dashboard/hashtag'
       preLoaderRoute: typeof DashboardHashtagRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/planos': {
+      id: '/dashboard/planos'
+      path: '/planos'
+      fullPath: '/dashboard/planos'
+      preLoaderRoute: typeof DashboardPlanosRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/templates': {
@@ -208,8 +208,8 @@ declare module '@tanstack/react-router' {
 
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
-  DashboardPlanosRoute: typeof DashboardPlanosRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
+  DashboardPlanosRoute: typeof DashboardPlanosRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRoute
   DashboardTopPlayersRoute: typeof DashboardTopPlayersRoute
   DashboardTranscricaoRoute: typeof DashboardTranscricaoRoute
@@ -218,8 +218,8 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
-  DashboardPlanosRoute: DashboardPlanosRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
+  DashboardPlanosRoute: DashboardPlanosRoute,
   DashboardTemplatesRoute: DashboardTemplatesRoute,
   DashboardTopPlayersRoute: DashboardTopPlayersRoute,
   DashboardTranscricaoRoute: DashboardTranscricaoRoute,

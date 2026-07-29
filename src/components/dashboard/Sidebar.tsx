@@ -56,7 +56,7 @@ export function Sidebar({
   collapsed,
   open,
   onCloseMobile,
-  onOpenUpgrade,
+}: {
   collapsed: boolean;
   open: boolean;
   onCloseMobile: () => void;
