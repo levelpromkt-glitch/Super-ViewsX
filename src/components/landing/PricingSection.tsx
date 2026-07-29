@@ -15,9 +15,20 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPlans() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (sessionData?.session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("plan_id")
+          .eq("id", sessionData.session.user.id)
+          .single();
+        if (profile) setCurrentPlanId(profile.plan_id);
+      }
       const { data: dbPlans, error: plansError } = await supabase
         .from("plans")
         .select("id, name, price, stripe_price_id, type")
@@ -143,7 +154,7 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
           <Loader2 className="animate-spin w-8 h-8" />
         </div>
       ) : (
-        <div className={`pricing-grid ${compact ? 'gap-3 max-w-3xl mx-auto' : ''}`}>
+        <div className={`pricing-grid ${compact ? 'gap-3 md:gap-4 max-w-sm md:max-w-2xl lg:max-w-3xl mx-auto' : ''}`}>
           {plans.map((plan) => {
             const PlanIcon = getIcon(plan.name);
             const isFeatured = plan.name === "PRO" || plan.name === "Pro";
@@ -166,9 +177,9 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
                   <div className={`pricing-price ${compact ? '!text-xl' : ''}`}>{priceText}</div>
                 </div>
 
-                <ul className={`pricing-features ${compact ? '!gap-1.5 !mb-3' : ''}`}>
+                <ul className={`pricing-features ${compact ? '!gap-1.5 !mb-3 md:!gap-2 md:!mb-4' : ''}`}>
                   {plan.features.map((feature) => (
-                    <li key={feature} className={`pricing-feature ${compact ? '!text-[11px] leading-tight' : ''}`}>
+                    <li key={feature} className={`pricing-feature ${compact ? '!text-[12px] md:!text-xs leading-tight' : ''}`}>
                       <span className="pricing-check">
                         <Check size={compact ? 14 : 16} strokeWidth={3} />
                       </span>
@@ -180,11 +191,11 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
                 <button
                   type="button"
                   onClick={() => handleSubscribe(plan)}
-                  disabled={checkoutLoading === plan.id}
-                  className={`pricing-cta ${isFeatured ? "pricing-cta-primary" : ""} flex items-center justify-center gap-2 ${compact ? '!py-1.5 !text-xs !mt-2' : ''}`}
+                  disabled={checkoutLoading === plan.id || currentPlanId === plan.id || (!currentPlanId && plan.name === "Free")}
+                  className={`pricing-cta ${isFeatured ? "pricing-cta-primary" : ""} flex items-center justify-center gap-2 ${compact ? '!py-2 !text-sm md:!text-xs md:!mt-2' : ''}`}
                 >
                   {checkoutLoading === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {buttonText}
+                  {currentPlanId === plan.id || (!currentPlanId && plan.name === "Free") ? "Plano Atual" : buttonText}
                 </button>
               </div>
             );
