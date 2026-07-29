@@ -56,10 +56,12 @@ export function Sidebar({
   collapsed,
   open,
   onCloseMobile,
+  onOpenUpgrade,
 }: {
   collapsed: boolean;
   open: boolean;
   onCloseMobile: () => void;
+  onOpenUpgrade?: () => void;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isAdmin } = useAuth();
@@ -114,9 +116,9 @@ export function Sidebar({
         <p className="upgrade-text">
           Acesso a ferramentas avançadas e recursos completos.
         </p>
-        <Link to="/dashboard/planos" className="btn-upgrade" aria-label="Fazer upgrade" style={{ textDecoration: 'none' }}>
+        <button type="button" className="btn-upgrade" aria-label="Fazer upgrade" onClick={onOpenUpgrade}>
           Fazer upgrade <ArrowUpRight size={14} />
-        </Link>
+        </button>
       </div>
     </aside>
   );

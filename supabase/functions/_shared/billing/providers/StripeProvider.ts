@@ -21,7 +21,6 @@ export class StripeProvider implements PaymentProvider {
     cancelUrl: string;
   }) {
     const session = await this.stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
       mode: params.mode,
       customer: params.customerId,
       customer_email: params.customerId ? undefined : params.email,
