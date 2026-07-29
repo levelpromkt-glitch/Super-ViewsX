@@ -153,7 +153,7 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
             return (
               <div
                 key={plan.id}
-                className={`pricing-card ${isFeatured ? "pricing-card-featured" : ""}`}
+                className={`pricing-card ${isFeatured ? "pricing-card-featured" : ""} ${compact ? "!p-6" : ""}`}
               >
                 {isFeatured && <span className="pricing-badge">Mais Popular</span>}
 
@@ -161,14 +161,14 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
                   <PlanIcon size={isFeatured ? 22 : 18} strokeWidth={2} />
                 </div>
 
-                <div className={`pricing-header ${compact ? 'mb-2' : ''}`}>
-                  <h3 className={`pricing-name ${compact ? 'text-lg' : ''}`}>{plan.name}</h3>
-                  <div className={`pricing-price ${compact ? 'text-2xl' : ''}`}>{priceText}</div>
+                <div className={`pricing-header ${compact ? '!mb-2' : ''}`}>
+                  <h3 className={`pricing-name ${compact ? '!text-lg' : ''}`}>{plan.name}</h3>
+                  <div className={`pricing-price ${compact ? '!text-2xl' : ''}`}>{priceText}</div>
                 </div>
 
-                <ul className={`pricing-features ${compact ? 'gap-2 mb-4' : ''}`}>
+                <ul className={`pricing-features ${compact ? '!gap-2 !mb-4' : ''}`}>
                   {plan.features.map((feature) => (
-                    <li key={feature} className={`pricing-feature ${compact ? 'text-sm' : ''}`}>
+                    <li key={feature} className={`pricing-feature ${compact ? '!text-xs' : ''}`}>
                       <span className="pricing-check">
                         <Check size={compact ? 14 : 16} strokeWidth={3} />
                       </span>
@@ -181,7 +181,7 @@ export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: (
                   type="button"
                   onClick={() => handleSubscribe(plan)}
                   disabled={checkoutLoading === plan.id}
-                  className={`pricing-cta ${isFeatured ? "pricing-cta-primary" : ""} flex items-center justify-center gap-2`}
+                  className={`pricing-cta ${isFeatured ? "pricing-cta-primary" : ""} flex items-center justify-center gap-2 ${compact ? '!py-2 !text-sm' : ''}`}
                 >
                   {checkoutLoading === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
                   {buttonText}
