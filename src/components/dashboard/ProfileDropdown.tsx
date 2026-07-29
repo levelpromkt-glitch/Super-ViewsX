@@ -75,9 +75,9 @@ export function ProfileDropdown({
             </div>
             <div className="profile-menu-meta-row">
               <span className="profile-menu-meta-label">Créditos</span>
-              <span className="profile-menu-credits">
-                <Zap size={12} /> {planInfo.credits}
-              </span>
+              <div className="flex items-center gap-1.5 text-white font-medium">
+                <Zap size={12} /> {user.credits ?? 0}
+              </div>
             </div>
           </div>
           <div className="dropdown-divider" />

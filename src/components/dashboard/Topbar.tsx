@@ -38,9 +38,9 @@ export function Topbar({
         )}
       </div>
       <div className="right">
-        <div className="topbar-credits" title={`${planInfo.credits} créditos disponíveis`}>
+        <div className="topbar-credits" title={`${user.credits ?? 0} créditos disponíveis`}>
           <Zap size={13} />
-          <span className="topbar-credits-value">{planInfo.credits}</span>
+          <span className="topbar-credits-value">{user.credits ?? 0}</span>
           <span className="topbar-credits-label">créditos</span>
         </div>
         <ProfileDropdown user={user} planInfo={planInfo} onLogout={onLogout} />
