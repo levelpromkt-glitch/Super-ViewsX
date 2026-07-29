@@ -11,7 +11,7 @@ interface Plan {
   features: string[];
 }
 
-export function PricingSection({ onOpenAuth }: { onOpenAuth?: () => void }) {
+export function PricingSection({ onOpenAuth, compact = false }: { onOpenAuth?: () => void, compact?: boolean }) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -125,23 +125,25 @@ export function PricingSection({ onOpenAuth }: { onOpenAuth?: () => void }) {
   };
 
   return (
-    <section className="lp-section pricing-section" id="planos">
-      <div className="lp-section-head">
-        <h2 className="lp-section-title">
-          Escolha o plano ideal para você
-        </h2>
-        <p className="lp-section-sub">
-          Tenha acesso às ferramentas para criar cortes melhores e acelerar seus
-          resultados.
-        </p>
-      </div>
+    <section className={`lp-section pricing-section ${compact ? 'py-4' : ''}`} id="planos">
+      {!compact && (
+        <div className="lp-section-head">
+          <h2 className="lp-section-title">
+            Escolha o plano ideal para você
+          </h2>
+          <p className="lp-section-sub">
+            Tenha acesso às ferramentas para criar cortes melhores e acelerar seus
+            resultados.
+          </p>
+        </div>
+      )}
 
       {loading ? (
-        <div className="flex justify-center items-center py-20 text-white">
+        <div className="flex justify-center items-center py-10 text-white">
           <Loader2 className="animate-spin w-8 h-8" />
         </div>
       ) : (
-        <div className="pricing-grid">
+        <div className={`pricing-grid ${compact ? 'gap-4 max-w-4xl mx-auto' : ''}`}>
           {plans.map((plan) => {
             const PlanIcon = getIcon(plan.name);
             const isFeatured = plan.name === "PRO" || plan.name === "Pro";
@@ -159,16 +161,16 @@ export function PricingSection({ onOpenAuth }: { onOpenAuth?: () => void }) {
                   <PlanIcon size={isFeatured ? 22 : 18} strokeWidth={2} />
                 </div>
 
-                <div className="pricing-header">
-                  <h3 className="pricing-name">{plan.name}</h3>
-                  <div className="pricing-price">{priceText}</div>
+                <div className={`pricing-header ${compact ? 'mb-2' : ''}`}>
+                  <h3 className={`pricing-name ${compact ? 'text-lg' : ''}`}>{plan.name}</h3>
+                  <div className={`pricing-price ${compact ? 'text-2xl' : ''}`}>{priceText}</div>
                 </div>
 
-                <ul className="pricing-features">
+                <ul className={`pricing-features ${compact ? 'gap-2 mb-4' : ''}`}>
                   {plan.features.map((feature) => (
-                    <li key={feature} className="pricing-feature">
+                    <li key={feature} className={`pricing-feature ${compact ? 'text-sm' : ''}`}>
                       <span className="pricing-check">
-                        <Check size={16} strokeWidth={3} />
+                        <Check size={compact ? 14 : 16} strokeWidth={3} />
                       </span>
                       <span>{feature}</span>
                     </li>

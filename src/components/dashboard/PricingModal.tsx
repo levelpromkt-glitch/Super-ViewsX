@@ -21,9 +21,9 @@ export function PricingModal({
           <X size={24} />
         </button>
         
-        {/* Renderiza a PricingSection original, mas com um scale menor para caber bonito na tela */}
-        <div className="overflow-y-auto h-full max-h-[90vh] pb-10 custom-scrollbar" style={{ transform: 'scale(0.85)', transformOrigin: 'top center', marginTop: '-20px' }}>
-          <PricingSection onOpenAuth={() => {}} />
+        {/* Renderiza a PricingSection original, mas no modo compacto para caber bonito na tela */}
+        <div className="overflow-y-auto w-full max-h-[85vh] p-2 custom-scrollbar">
+          <PricingSection onOpenAuth={() => {}} compact={true} />
         </div>
       </div>
     </div>

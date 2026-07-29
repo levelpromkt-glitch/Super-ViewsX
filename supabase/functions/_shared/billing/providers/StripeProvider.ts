@@ -25,6 +25,7 @@ export class StripeProvider implements PaymentProvider {
       mode: params.mode,
       customer: params.customerId,
       customer_email: params.customerId ? undefined : params.email,
+      payment_method_types: ['card', 'pix'],
       line_items: [
         {
           price: params.priceId,
