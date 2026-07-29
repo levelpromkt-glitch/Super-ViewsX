@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
+import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
@@ -36,6 +37,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
 const DashboardAdminRoute = DashboardAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPlanosRoute = DashboardPlanosRouteImport.update({
+  id: '/planos',
+  path: '/planos',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardHashtagRoute = DashboardHashtagRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/admin'
+    | '/dashboard/planos'
     | '/dashboard/hashtag'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard/admin'
+    | '/dashboard/planos'
     | '/dashboard/hashtag'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/admin'
+    | '/dashboard/planos'
     | '/dashboard/hashtag'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -156,6 +168,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAdminRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/planos': {
+      id: '/dashboard/planos'
+      path: '/planos'
+      fullPath: '/dashboard/planos'
+      preLoaderRoute: typeof DashboardPlanosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/hashtag': {
       id: '/dashboard/hashtag'
       path: '/hashtag'
@@ -189,6 +208,7 @@ declare module '@tanstack/react-router' {
 
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
+  DashboardPlanosRoute: typeof DashboardPlanosRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRoute
   DashboardTopPlayersRoute: typeof DashboardTopPlayersRoute
@@ -198,6 +218,7 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
+  DashboardPlanosRoute: DashboardPlanosRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardTemplatesRoute: DashboardTemplatesRoute,
   DashboardTopPlayersRoute: DashboardTopPlayersRoute,

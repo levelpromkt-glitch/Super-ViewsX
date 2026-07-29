@@ -10,7 +10,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { useAuth } from "@/hooks/useAuth";
-import { PricingModal } from "@/components/dashboard/PricingModal";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardLayout,
@@ -31,7 +30,6 @@ function DashboardLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isPricingOpen, setIsPricingOpen] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -54,7 +52,6 @@ function DashboardLayout() {
           collapsed={collapsed}
           open={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
-          onOpenUpgrade={() => setIsPricingOpen(true)}
         />
         <button
           className={`sidebar-toggle-btn${collapsed ? " collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}
@@ -83,7 +80,6 @@ function DashboardLayout() {
           </div>
         </main>
       </div>
-      <PricingModal open={isPricingOpen} onClose={() => setIsPricingOpen(false)} />
     </>
   );
 }

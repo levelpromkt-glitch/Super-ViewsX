@@ -57,11 +57,9 @@ export function Sidebar({
   open,
   onCloseMobile,
   onOpenUpgrade,
-}: {
   collapsed: boolean;
   open: boolean;
   onCloseMobile: () => void;
-  onOpenUpgrade?: () => void;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isAdmin } = useAuth();
@@ -109,16 +107,22 @@ export function Sidebar({
           );
         })}
       </nav>
-      <div className="sidebar-upgrade-card">
-        <p className="upgrade-title">
-          Desbloqueie o <span className="highlight">Pro</span>
+      <div className="sidebar-upgrade-card relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <p className="upgrade-title relative z-10 flex items-center gap-1.5">
+          <Flame size={16} className="text-orange-500 animate-pulse" />
+          Desbloqueie o <span className="highlight font-bold text-white">PRO</span>
         </p>
-        <p className="upgrade-text">
-          Acesso a ferramentas avançadas e recursos completos.
+        <p className="upgrade-text relative z-10 opacity-80 text-[11px] mb-3">
+          Acesso a ferramentas avançadas e recursos sem limites.
         </p>
-        <button type="button" className="btn-upgrade" aria-label="Fazer upgrade" onClick={onOpenUpgrade}>
-          Fazer upgrade <ArrowUpRight size={14} />
-        </button>
+        <Link 
+          to="/dashboard/planos" 
+          onClick={onCloseMobile}
+          className="btn-upgrade relative z-10 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white border-0 shadow-lg shadow-indigo-500/25 font-medium py-2 rounded-lg transition-all"
+        >
+          Ver Planos <ArrowUpRight size={14} />
+        </Link>
       </div>
     </aside>
   );
