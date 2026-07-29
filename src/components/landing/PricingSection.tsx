@@ -11,7 +11,7 @@ interface Plan {
   features: string[];
 }
 
-export function PricingSection() {
+export function PricingSection({ onOpenAuth }: { onOpenAuth?: () => void }) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export function PricingSection() {
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session) {
         toast.error("Você precisa estar logado para assinar um plano.");
-        window.location.href = "/auth";
+        if (onOpenAuth) onOpenAuth();
         return;
       }
 

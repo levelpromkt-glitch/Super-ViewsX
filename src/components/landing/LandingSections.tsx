@@ -27,7 +27,7 @@ export function LandingSections({ onOpenAuth }: { onOpenAuth: () => void }) {
       <TemplatesSection />
 
       <ComparisonSection />
-      <PricingSection />
+      <PricingSection onOpenAuth={onOpenAuth} />
 
       <footer className="lp-footer">
         <img src="/logo.png" alt="Super Views X" className="logo-img" />
