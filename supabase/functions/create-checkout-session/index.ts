@@ -30,7 +30,7 @@ serve(async (req) => {
       const { data } = await supabaseAdmin.from('plans').select('stripe_price_id').eq('id', planId).single();
       if (!data?.stripe_price_id) throw new Error("Plan not found or missing price ID");
       stripePriceId = data.stripe_price_id;
-      mode = "subscription";
+      mode = "payment"; // Agora todos os planos são pagamentos únicos (1 mês)
     } else if (packageId) {
       const { data } = await supabaseAdmin.from('credit_packages').select('stripe_price_id').eq('id', packageId).single();
       if (!data?.stripe_price_id) throw new Error("Package not found or missing price ID");
@@ -57,7 +57,11 @@ serve(async (req) => {
       userId: user.id,
       mode,
       successUrl: successUrl || `${req.headers.get("origin")}/dashboard?payment=success`,
-      cancelUrl: cancelUrl || `${req.headers.get("origin")}/pricing?payment=cancelled`
+      cancelUrl: cancelUrl || `${req.headers.get("origin")}/pricing?payment=cancelled`,
+      metadata: {
+        ...(planId && { planId }),
+        ...(packageId && { packageId }),
+      }
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

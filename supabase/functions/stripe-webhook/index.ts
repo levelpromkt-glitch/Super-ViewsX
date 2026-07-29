@@ -30,18 +30,45 @@ serve(async (req) => {
       if (!userId) return new Response("No user ID", { status: 200 });
 
       if (session.mode === 'payment') {
-         // This is a quick lookup for Adhoc credits (Normally we'd join with credit_packages by price_id)
-         const credits = session.amount_total === 1490 ? 15 : session.amount_total === 2497 ? 25 : session.amount_total === 3990 ? 50 : 0; 
-         if (credits > 0) {
-           await BillingEventLogger.logAdhocPurchase(userId, credits, session.payment_intent as string);
+         if (session.metadata?.planId) {
+             const planId = session.metadata.planId;
+             const { data: plan } = await supabaseAdmin.from('plans').select('name').eq('id', planId).single();
+             
+             // Define credits based on plan name
+             let credits = 0;
+             if (plan?.name?.includes('Start')) credits = 55;
+             if (plan?.name?.includes('PRO') || plan?.name?.includes('Pro')) credits = 120;
+             
+             const endDate = new Date();
+             endDate.setDate(endDate.getDate() + 30); // 30 days access
+             
+             await supabaseAdmin.from('profiles').update({ 
+               stripe_subscription_id: session.id, // using session id as sub id for one-time
+               subscription_status: 'active',
+               plan_id: planId,
+               current_period_end: endDate.toISOString()
+             }).eq('id', userId);
+
+             if (credits > 0) {
+               await BillingEventLogger.logSubscriptionRenewal(userId, planId, credits, 'onetime_' + session.id, session.id);
+             }
+         } else {
+             // Adhoc credits
+             const credits = session.amount_total === 1490 ? 15 : session.amount_total === 2497 ? 25 : session.amount_total === 3990 ? 50 : 0; 
+             if (credits > 0) {
+               await BillingEventLogger.logAdhocPurchase(userId, credits, session.payment_intent as string);
+             }
          }
       } else if (session.mode === 'subscription') {
-         // Link subscription to user
+         // Link subscription to user (Legacy)
          const { data: plan } = await supabaseAdmin.from('plans').select('id').eq('stripe_price_id', session.line_items?.data[0]?.price?.id || '').single();
-         await supabaseAdmin.from('profiles').update({ 
-           stripe_subscription_id: session.subscription,
-           subscription_status: 'active'
-         }).eq('id', userId);
+         if (plan) {
+           await supabaseAdmin.from('profiles').update({ 
+             stripe_subscription_id: session.subscription,
+             subscription_status: 'active',
+             plan_id: plan.id
+           }).eq('id', userId);
+         }
       }
     } else if (event.type === 'invoice.paid') {
        const invoice = event.data.object;

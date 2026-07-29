@@ -19,6 +19,7 @@ export class StripeProvider implements PaymentProvider {
     mode: 'subscription' | 'payment';
     successUrl: string;
     cancelUrl: string;
+    metadata?: Record<string, string>;
   }) {
     const session = await this.stripe.checkout.sessions.create({
       mode: params.mode,
@@ -35,6 +36,7 @@ export class StripeProvider implements PaymentProvider {
       client_reference_id: params.userId,
       metadata: {
         userId: params.userId,
+        ...params.metadata
       },
     });
 
