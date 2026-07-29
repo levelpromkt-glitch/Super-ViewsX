@@ -1,65 +1,129 @@
-import { Check, Sparkles, Rocket, Crown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Sparkles, Rocket, Crown, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
-interface PricingPlan {
-  key: string;
+interface Plan {
+  id: string;
   name: string;
-  price: string;
-  badge?: string;
-  cta: string;
+  price: number;
+  stripe_price_id: string | null;
   features: string[];
-  featured?: boolean;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
 }
 
-const plans: PricingPlan[] = [
-  {
-    key: "free",
-    name: "Free",
-    price: "Grátis",
-    cta: "Começar Grátis",
-    features: [
-      "5 créditos de boas-vindas", 
-      "Acesso a Todas as Competições", 
-      "2 Templates básicos",
-      "Pesquisa de Hashtag e Transcrição",
-      "Download de cortes (Bloqueado)",
-      "Top Players (Bloqueado)"
-    ],
-    icon: Sparkles,
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "R$ 59,97/mês",
-    badge: "Mais Popular",
-    cta: "Selecionar Plano",
-    features: [
-      "120 créditos / mês (não cumulativos)", 
-      "Acesso a Todas as Competições", 
-      "TODOS os Templates disponíveis",
-      "Download de cortes ilimitado",
-      "Acesso total à Função Top Players"
-    ],
-    featured: true,
-    icon: Crown,
-  },
-  {
-    key: "start",
-    name: "Start",
-    price: "R$ 37,90/mês",
-    cta: "Selecionar Plano",
-    features: [
-      "55 créditos / mês (não cumulativos)", 
-      "Acesso a Todas as Competições", 
-      "20 Templates desbloqueados",
-      "Download de cortes liberado",
-      "Top Players (Bloqueado)"
-    ],
-    icon: Rocket,
-  },
-];
-
 export function PricingSection() {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadPlans() {
+      const { data: dbPlans, error: plansError } = await supabase
+        .from("plans")
+        .select("id, name, price, stripe_price_id, type")
+        .eq("type", "subscription")
+        .order("price", { ascending: true });
+
+      if (plansError) {
+        console.error("Error loading plans:", plansError);
+        setLoading(false);
+        return;
+      }
+
+      const formattedPlans = dbPlans.map((p) => {
+        let features: string[] = [];
+        if (p.name === "Plano Free") {
+          features = [
+            "5 créditos de boas-vindas", 
+            "Acesso a Todas as Competições", 
+            "2 Templates básicos",
+            "Pesquisa de Hashtag e Transcrição",
+            "Download de cortes (Bloqueado)",
+            "Top Players (Bloqueado)"
+          ];
+        } else if (p.name === "Plano Start") {
+          features = [
+            "55 créditos / mês (não cumulativos)", 
+            "Acesso a Todas as Competições", 
+            "20 Templates desbloqueados",
+            "Download de cortes liberado",
+            "Top Players (Bloqueado)"
+          ];
+        } else if (p.name === "Plano PRO") {
+          features = [
+            "120 créditos / mês (não cumulativos)", 
+            "Acesso a Todas as Competições", 
+            "TODOS os Templates disponíveis",
+            "Download de cortes ilimitado",
+            "Acesso total à Função Top Players"
+          ];
+        }
+
+        return {
+          id: p.id,
+          name: p.name.replace("Plano ", ""), // Transforma "Plano Free" em "Free"
+          price: p.price,
+          stripe_price_id: p.stripe_price_id,
+          features
+        };
+      });
+
+      // Ordena: Free, PRO (no meio), Start
+      const free = formattedPlans.find((p) => p.name === "Free");
+      const pro = formattedPlans.find((p) => p.name === "PRO" || p.name === "Pro");
+      const start = formattedPlans.find((p) => p.name === "Start");
+
+      const ordered = [];
+      if (free) ordered.push(free);
+      if (pro) ordered.push(pro);
+      if (start) ordered.push(start);
+
+      setPlans(ordered);
+      setLoading(false);
+    }
+
+    loadPlans();
+  }, []);
+
+  const handleSubscribe = async (plan: Plan) => {
+    if (plan.name === "Free") {
+      window.location.href = "/dashboard";
+      return;
+    }
+
+    try {
+      setCheckoutLoading(plan.id);
+      
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session) {
+        toast.error("Você precisa estar logado para assinar um plano.");
+        window.location.href = "/auth";
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { planId: plan.id }
+      });
+
+      if (error) throw error;
+      
+      if (data?.url) {
+        window.location.href = data.url; // Redireciona para o checkout da Stripe
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao iniciar pagamento. Tente novamente.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const getIcon = (name: string) => {
+    if (name === "Free") return Sparkles;
+    if (name === "PRO" || name === "Pro") return Crown;
+    return Rocket;
+  };
+
   return (
     <section className="lp-section pricing-section" id="planos">
       <div className="lp-section-head">
@@ -72,46 +136,59 @@ export function PricingSection() {
         </p>
       </div>
 
-      <div className="pricing-grid">
-        {plans.map((plan) => {
-          const PlanIcon = plan.icon;
-          return (
-            <div
-              key={plan.key}
-              className={`pricing-card ${plan.featured ? "pricing-card-featured" : ""}`}
-            >
-              {plan.badge && <span className="pricing-badge">{plan.badge}</span>}
+      {loading ? (
+        <div className="flex justify-center items-center py-20 text-white">
+          <Loader2 className="animate-spin w-8 h-8" />
+        </div>
+      ) : (
+        <div className="pricing-grid">
+          {plans.map((plan) => {
+            const PlanIcon = getIcon(plan.name);
+            const isFeatured = plan.name === "PRO" || plan.name === "Pro";
+            const priceText = plan.price === 0 ? "Grátis" : `R$ ${plan.price.toFixed(2).replace('.', ',')}/mês`;
+            const buttonText = plan.name === "Free" ? "Começar Grátis" : "Selecionar Plano";
 
-              <div className={`pricing-icon ${plan.featured ? "pricing-icon-featured" : ""}`}>
-                <PlanIcon size={plan.featured ? 22 : 18} strokeWidth={2} />
-              </div>
-
-              <div className="pricing-header">
-                <h3 className="pricing-name">{plan.name}</h3>
-                <div className="pricing-price">{plan.price}</div>
-              </div>
-
-              <ul className="pricing-features">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="pricing-feature">
-                    <span className="pricing-check">
-                      <Check size={16} strokeWidth={3} />
-                    </span>
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                type="button"
-                className={`pricing-cta ${plan.featured ? "pricing-cta-primary" : ""}`}
+            return (
+              <div
+                key={plan.id}
+                className={`pricing-card ${isFeatured ? "pricing-card-featured" : ""}`}
               >
-                {plan.cta}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                {isFeatured && <span className="pricing-badge">Mais Popular</span>}
+
+                <div className={`pricing-icon ${isFeatured ? "pricing-icon-featured" : ""}`}>
+                  <PlanIcon size={isFeatured ? 22 : 18} strokeWidth={2} />
+                </div>
+
+                <div className="pricing-header">
+                  <h3 className="pricing-name">{plan.name}</h3>
+                  <div className="pricing-price">{priceText}</div>
+                </div>
+
+                <ul className="pricing-features">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="pricing-feature">
+                      <span className="pricing-check">
+                        <Check size={16} strokeWidth={3} />
+                      </span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => handleSubscribe(plan)}
+                  disabled={checkoutLoading === plan.id}
+                  className={`pricing-cta ${isFeatured ? "pricing-cta-primary" : ""} flex items-center justify-center gap-2`}
+                >
+                  {checkoutLoading === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {buttonText}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
