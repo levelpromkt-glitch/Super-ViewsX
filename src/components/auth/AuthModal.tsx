@@ -97,13 +97,13 @@ export function AuthModal({
           >
             Entrar
           </button>
-          <button
+          {/* <button
             className={`auth-tab${tab === "register" ? " active" : ""}`}
             onClick={() => setTab("register")}
             type="button"
           >
             Criar conta
-          </button>
+          </button> */}
         </div>
 
         {tab === "login" ? (

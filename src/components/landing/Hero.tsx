@@ -98,11 +98,11 @@ export function Hero({ onOpenAuth }: { onOpenAuth?: () => void }) {
       </p>
       <div className="hero-cta">
         <button className="btn-primary-nav hero-cta-primary" onClick={onOpenAuth}>
-          Começar Grátis <ArrowRight size={16} />
+          Acessar Plataforma <ArrowRight size={16} />
         </button>
-        <button className="btn-outline hero-cta-ghost" onClick={onOpenAuth}>
+        {/* <button className="btn-outline hero-cta-ghost" onClick={onOpenAuth}>
           Entrar
-        </button>
+        </button> */}
       </div>
 
       <div className="shorts-feed" aria-hidden="true">
