@@ -86,21 +86,35 @@ function TemplatesPage() {
             <div className="tpl-modal-body">
               <img src={selected.image} alt={selected.name} />
             </div>
-            <div className="tpl-modal-footer">
+            <div className="tpl-modal-footer flex gap-2 w-full flex-wrap justify-between">
               <button
                 className="btn-outline"
                 onClick={() => setSelected(null)}
               >
                 Fechar
               </button>
-              <a
-                className="btn-primary"
-                href={selected.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download size={15} /> Baixar template
-              </a>
+              <div className="flex gap-2">
+                {selected.downloadUrlMobile && (
+                  <a
+                    className="btn-primary"
+                    href={selected.downloadUrlMobile}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download size={15} /> CapCut Celular
+                  </a>
+                )}
+                {selected.downloadUrlPc && (
+                  <a
+                    className="btn-primary"
+                    href={selected.downloadUrlPc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download size={15} /> PC
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>

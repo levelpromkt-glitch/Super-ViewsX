@@ -195,7 +195,8 @@ function TemplatesAdmin() {
   const [list, setList] = useState<Template[]>([]);
   const [name, setName] = useState("");
   const [image, setImage] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [downloadUrlPc, setDownloadUrlPc] = useState("");
+  const [downloadUrlMobile, setDownloadUrlMobile] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -217,7 +218,8 @@ function TemplatesAdmin() {
   const reset = () => {
     setName("");
     setImage("");
-    setDownloadUrl("");
+    setDownloadUrlPc("");
+    setDownloadUrlMobile("");
     setEditingId(null);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -231,16 +233,16 @@ function TemplatesAdmin() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !image || !downloadUrl.trim()) {
-      alert("Preencha nome, imagem e link de download.");
+    if (!name.trim() || !image || (!downloadUrlPc.trim() && !downloadUrlMobile.trim())) {
+      alert("Preencha nome, imagem e pelo menos um link de download.");
       return;
     }
     setIsSaving(true);
     try {
       if (editingId) {
-        await updateTemplate(editingId, { name: name.trim(), image, downloadUrl: downloadUrl.trim() });
+        await updateTemplate(editingId, { name: name.trim(), image, downloadUrlPc: downloadUrlPc.trim(), downloadUrlMobile: downloadUrlMobile.trim() });
       } else {
-        await createTemplate({ name: name.trim(), image, downloadUrl: downloadUrl.trim() });
+        await createTemplate({ name: name.trim(), image, downloadUrlPc: downloadUrlPc.trim(), downloadUrlMobile: downloadUrlMobile.trim() });
       }
       reset();
     } finally {
@@ -252,7 +254,8 @@ function TemplatesAdmin() {
     setEditingId(t.id);
     setName(t.name);
     setImage(t.image);
-    setDownloadUrl(t.downloadUrl);
+    setDownloadUrlPc(t.downloadUrlPc || "");
+    setDownloadUrlMobile(t.downloadUrlMobile || "");
   };
 
   const handleDelete = async (t: Template) => {
@@ -322,12 +325,22 @@ function TemplatesAdmin() {
           </div>
 
           <label className="admin-field admin-field-full">
-            <span>Link de download</span>
+            <span>Link de download (PC)</span>
             <input
               type="url"
-              placeholder="Cole aqui o link para download do template"
-              value={downloadUrl}
-              onChange={(e) => setDownloadUrl(e.target.value)}
+              placeholder="Cole aqui o link para download (PC)"
+              value={downloadUrlPc}
+              onChange={(e) => setDownloadUrlPc(e.target.value)}
+            />
+          </label>
+
+          <label className="admin-field admin-field-full">
+            <span>Link de download (CapCut Celular)</span>
+            <input
+              type="url"
+              placeholder="Cole aqui o link para download (Mobile)"
+              value={downloadUrlMobile}
+              onChange={(e) => setDownloadUrlMobile(e.target.value)}
             />
           </label>
         </div>
@@ -356,14 +369,32 @@ function TemplatesAdmin() {
                 </div>
                 <div className="tpl-admin-info">
                   <div className="admin-cell-name">{t.name}</div>
-                  <a
-                    className="tpl-admin-link"
-                    href={t.downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {t.downloadUrl}
-                  </a>
+                  {t.downloadUrlPc && (
+                    <div className="tpl-admin-link-row">
+                      <span className="tpl-admin-link-label">PC:</span>
+                      <a
+                        className="tpl-admin-link"
+                        href={t.downloadUrlPc}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t.downloadUrlPc}
+                      </a>
+                    </div>
+                  )}
+                  {t.downloadUrlMobile && (
+                    <div className="tpl-admin-link-row">
+                      <span className="tpl-admin-link-label">Mobile:</span>
+                      <a
+                        className="tpl-admin-link"
+                        href={t.downloadUrlMobile}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t.downloadUrlMobile}
+                      </a>
+                    </div>
+                  )}
                 </div>
                 <div className="admin-row-actions">
                   <button

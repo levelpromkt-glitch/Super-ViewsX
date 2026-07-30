@@ -4,7 +4,8 @@ export type Template = {
   id: string;
   name: string;
   image: string; // URL pública da imagem
-  downloadUrl: string;
+  downloadUrlPc: string;
+  downloadUrlMobile: string;
 };
 
 // Event bus para avisar os componentes sobre mudanças
