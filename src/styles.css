@@ -891,7 +891,7 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
 .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
 .tpl-card { background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; transition: all .2s; box-shadow: var(--shadow-soft); }
 .tpl-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
-.tpl-card-img { aspect-ratio: 16 / 10; background: #000; overflow: hidden; }
+.tpl-card-img { aspect-ratio: 9 / 16; background: #000; overflow: hidden; }
 .tpl-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
 .tpl-card:hover .tpl-card-img img { transform: scale(1.04); }
 .tpl-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
