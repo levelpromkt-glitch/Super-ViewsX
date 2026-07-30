@@ -162,14 +162,11 @@ export function CampaignFormModal({
             </label>
             <label className="admin-field">
               <span>Tipo</span>
-              <select
+              <input
                 value={form.format}
                 onChange={(e) => setForm({ ...form, format: e.target.value })}
-              >
-                {FORMATS.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
+                placeholder="Ex: RPM, CLASSIFICAÇÃO..."
+              />
             </label>
             <label className="admin-field">
               <span>Status</span>
