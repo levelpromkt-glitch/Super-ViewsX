@@ -26,7 +26,7 @@ serve(async (req) => {
     const validatedRequest = validateSearchRequest(rawBody);
     
     // 2. Parser
-    const parsedQuery = parseQuery(validatedRequest.query);
+    const parsedQuery = parseQuery(validatedRequest.query, validatedRequest.platform);
     const publishedAfter = parsePeriodToISO(validatedRequest.period);
 
     logger.info("Starting viral mining", { query: parsedQuery, period: validatedRequest.period });
