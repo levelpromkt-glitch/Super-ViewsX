@@ -312,14 +312,19 @@ function HashtagPage() {
                 <article key={v.id} className="hs-card">
                   <div
                     className="hs-thumb"
-                    style={{
-                      backgroundImage: `url(${v.thumbnail})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }}
+                    style={{ position: 'relative', overflow: 'hidden' }}
                   >
-                    <Play size={26} className="hs-thumb-play" />
-                    <span className="hs-thumb-speed">
+                    {v.thumbnail && (
+                      <img 
+                        src={v.thumbnail} 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                        style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, objectFit: 'cover', zIndex: 0 }}
+                      />
+                    )}
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.1)', zIndex: 1 }}></div>
+                    <Play size={26} className="hs-thumb-play" style={{ position: 'relative', zIndex: 2 }} />
+                    <span className="hs-thumb-speed" style={{ position: 'relative', zIndex: 2 }}>
                       <Flame size={10} /> {v.viralMetrics?.score || 0} Score
                     </span>
                   </div>

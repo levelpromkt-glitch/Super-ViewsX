@@ -37,11 +37,8 @@ export const instagramProvider: SocialProvider = {
       }
 
       // Pagination check
-      if (rawData.data && rawData.data.more_available === false) {
-        hasMore = false;
-        currentCursor = undefined;
-      } else if (rawData.data && rawData.data.next_max_id) {
-        currentCursor = rawData.data.next_max_id;
+      if (rawData.data && rawData.data.cursor) {
+        currentCursor = String(rawData.data.cursor);
       } else {
         hasMore = false;
         currentCursor = undefined;

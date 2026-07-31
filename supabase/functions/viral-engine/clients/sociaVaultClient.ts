@@ -12,7 +12,7 @@ export const sociaVaultClient = {
     try {
       let fetchUrl = `${url}?hashtag=${encodeURIComponent(hashtag)}&limit=${maxResults}`;
       if (cursor) {
-        fetchUrl += `&next_max_id=${encodeURIComponent(cursor)}`;
+        fetchUrl += `&cursor=${encodeURIComponent(cursor)}`;
       }
 
       const response = await fetch(fetchUrl, {
