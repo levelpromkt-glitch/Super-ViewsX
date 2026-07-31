@@ -12,8 +12,8 @@ import {
   MessageCircle,
   Play,
   Search,
-  Youtube,
-  Instagram,
+  Video,
+  Camera,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/hashtag")({
@@ -291,9 +291,9 @@ function HashtagPage() {
                   <div className="hs-card-body">
                     <div className="flex items-center gap-2 mb-1">
                       {v.platform === "instagram" ? (
-                        <Instagram size={14} className="text-pink-500" />
+                        <Camera size={14} className="text-pink-500" />
                       ) : (
-                        <Youtube size={14} className="text-red-500" />
+                        <Video size={14} className="text-red-500" />
                       )}
                       <h3 className="hs-card-title m-0">{v.title}</h3>
                     </div>
