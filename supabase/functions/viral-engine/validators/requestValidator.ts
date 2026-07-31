@@ -22,6 +22,7 @@ export const validateSearchRequest = (body: any) => {
     minViews: body.minViews ? parseInt(body.minViews) : 0,
     maxResults,
     platform,
+    cursor: body.cursor
   };
 };
 

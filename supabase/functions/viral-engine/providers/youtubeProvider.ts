@@ -6,8 +6,8 @@ import { YOUTUBE_CONSTANTS } from "../constants/youtube.ts";
 import { SocialProvider, ProviderResponse } from "../types/provider.ts";
 
 export const youtubeProvider: SocialProvider = {
-  searchByHashtag: async (parsedQuery: string, publishedAfter: string, maxResults: number, minViews: number): Promise<ProviderResponse> => {
-    // 1. Fetch Search Results
+  searchByHashtag: async (parsedQuery: string, publishedAfter: string, maxResults: number, minViews: number, cursor?: string): Promise<ProviderResponse> => {
+    // 1. Fetch Search Results (Cursor ignored for YouTube for now)
     const searchData = await youtubeClient.searchVideos(parsedQuery, publishedAfter, maxResults);
     
     const videoIds = (searchData.items || [])

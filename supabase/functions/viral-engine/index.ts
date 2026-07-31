@@ -36,7 +36,8 @@ serve(async (req) => {
       validatedRequest.platform,
       parsedQuery,
       validatedRequest.period,
-      validatedRequest.minViews
+      validatedRequest.minViews,
+      validatedRequest.cursor
     );
 
     if (cachedData) {
@@ -58,6 +59,7 @@ serve(async (req) => {
             totalResults: cachedData.videos.length
           },
           videos: cachedData.videos,
+          nextCursor: cachedData.nextCursor
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -69,7 +71,8 @@ serve(async (req) => {
       parsedQuery,
       publishedAfter,
       validatedRequest.maxResults,
-      validatedRequest.minViews
+      validatedRequest.minViews,
+      validatedRequest.cursor
     );
 
     const executionTime = Date.now() - startTime;
@@ -93,6 +96,7 @@ serve(async (req) => {
         cached: false
       },
       videos: providerResponse.videos,
+      nextCursor: providerResponse.nextCursor
     };
 
     // 6. Save to Cache
@@ -101,7 +105,8 @@ serve(async (req) => {
       parsedQuery,
       validatedRequest.period,
       validatedRequest.minViews,
-      providerResponse
+      providerResponse,
+      validatedRequest.cursor
     );
 
     logger.info("Mining complete", { executionTime, platform: validatedRequest.platform, totalResults: providerResponse.videos.length });

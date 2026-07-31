@@ -61,6 +61,8 @@ function HashtagPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState<{ tag: string; period: Period; minViews: number } | null>(null);
   const [actualResults, setActualResults] = useState<any[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [periodOpen, setPeriodOpen] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
 
@@ -90,6 +92,7 @@ function HashtagPage() {
     setError(null);
     setLoading(true);
     setSearched(false);
+    setNextCursor(null);
     
     try {
       const { data, error: functionError } = await supabase.functions.invoke('viral-engine', {
@@ -106,12 +109,44 @@ function HashtagPage() {
 
       setLastQuery({ tag: clean, period, minViews });
       setActualResults(data.videos || []);
+      setNextCursor(data.nextCursor || null);
       setSearched(true);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Erro ao buscar vídeos. Tente novamente mais tarde.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!lastQuery || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const { data, error: functionError } = await supabase.functions.invoke('viral-engine', {
+        body: {
+          platform,
+          query: lastQuery.tag,
+          period: lastQuery.period,
+          minViews: lastQuery.minViews,
+          cursor: nextCursor
+        }
+      });
+
+      if (functionError) throw functionError;
+      if (!data.success) throw new Error(data.message || "Erro desconhecido");
+
+      setActualResults(prev => {
+        const existingIds = new Set(prev.map(v => v.id));
+        const newVideos = (data.videos || []).filter((v: any) => !existingIds.has(v.id));
+        return [...prev, ...newVideos];
+      });
+      setNextCursor(data.nextCursor || null);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Erro ao carregar mais vídeos.");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -322,6 +357,25 @@ function HashtagPage() {
                 </article>
               ))}
             </section>
+          )}
+
+          {nextCursor && (
+            <div className="flex justify-center mt-8 mb-12">
+              <button
+                className="hs-btn-primary"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                style={{ backgroundColor: '#27272a', borderColor: '#3f3f46', width: 'auto', padding: '0 32px' }}
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 size={15} className="hs-spin" /> Carregando...
+                  </>
+                ) : (
+                  "Carregar mais vídeos"
+                )}
+              </button>
+            </div>
           )}
         </>
       )}

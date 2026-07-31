@@ -22,6 +22,7 @@ export interface ProviderResponse {
   videos: ViralVideo[];
   quotaUsed?: number;
   meta?: any;
+  nextCursor?: string;
 }
 
 export interface SocialProvider {
@@ -29,6 +30,7 @@ export interface SocialProvider {
     query: string,
     publishedAfter: string,
     maxResults: number,
-    minViews: number
+    minViews: number,
+    cursor?: string
   ): Promise<ProviderResponse>;
 }

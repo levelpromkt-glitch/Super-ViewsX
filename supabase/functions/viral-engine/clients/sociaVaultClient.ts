@@ -1,7 +1,7 @@
 import { AppError } from "../utils/errorHandler.ts";
 
 export const sociaVaultClient = {
-  fetchInstagramHashtag: async (hashtag: string, maxResults: number) => {
+  fetchInstagramHashtag: async (hashtag: string, maxResults: number, cursor?: string) => {
     const url = Deno.env.get("SOCIAVAULT_URL");
     const apiKey = Deno.env.get("SOCIAVAULT_API_KEY");
 
@@ -10,7 +10,12 @@ export const sociaVaultClient = {
     }
 
     try {
-      const response = await fetch(`${url}?hashtag=${encodeURIComponent(hashtag)}&limit=${maxResults}`, {
+      let fetchUrl = `${url}?hashtag=${encodeURIComponent(hashtag)}&limit=${maxResults}`;
+      if (cursor) {
+        fetchUrl += `&next_max_id=${encodeURIComponent(cursor)}`;
+      }
+
+      const response = await fetch(fetchUrl, {
         method: 'GET',
         headers: {
           'x-api-key': apiKey,
