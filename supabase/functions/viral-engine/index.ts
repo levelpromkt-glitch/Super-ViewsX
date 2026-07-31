@@ -59,7 +59,8 @@ serve(async (req) => {
             totalResults: cachedData.videos.length
           },
           videos: cachedData.videos,
-          nextCursor: cachedData.nextCursor
+          nextCursor: cachedData.nextCursor,
+          status: cachedData.status || "ready"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -96,7 +97,8 @@ serve(async (req) => {
         cached: false
       },
       videos: providerResponse.videos,
-      nextCursor: providerResponse.nextCursor
+      nextCursor: providerResponse.nextCursor,
+      status: providerResponse.status || "ready"
     };
 
     // 6. Save to Cache

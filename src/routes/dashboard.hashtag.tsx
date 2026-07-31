@@ -57,6 +57,7 @@ function HashtagPage() {
   const [minViews, setMinViews] = useState(5000);
 
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("");
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState<{ tag: string; period: Period; minViews: number } | null>(null);
@@ -75,6 +76,8 @@ function HashtagPage() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [periodOpen]);
 
+  const currentSearchId = useRef(0);
+
   const currentPeriodLabel = PERIODS.find((p) => p.id === period)?.label ?? "";
   const periodLabel = PERIODS.find((p) => p.id === (lastQuery?.period ?? period))?.label ?? "";
 
@@ -89,33 +92,60 @@ function HashtagPage() {
       setError("Digite uma hashtag para pesquisar.");
       return;
     }
+    
+    currentSearchId.current += 1;
+    const mySearchId = currentSearchId.current;
+
     setError(null);
     setLoading(true);
+    setLoadingStatus("Iniciando a busca...");
     setSearched(false);
     setNextCursor(null);
     
     try {
-      const { data, error: functionError } = await supabase.functions.invoke('viral-engine', {
-        body: {
-          platform,
-          query: clean,
-          period,
-          minViews
+      let currentCursor: string | undefined = undefined;
+      let finalData: any = null;
+
+      while (mySearchId === currentSearchId.current) {
+        const { data, error: functionError } = await supabase.functions.invoke('viral-engine', {
+          body: {
+            platform,
+            query: clean,
+            period,
+            minViews,
+            cursor: currentCursor
+          }
+        });
+
+        if (functionError) throw functionError;
+        if (!data.success) throw new Error(data.message || "Erro desconhecido");
+
+        if (data.status === "polling") {
+          currentCursor = data.nextCursor;
+          setLoadingStatus("Minerando vídeos na Bright Data (Isso pode levar de 1 a 2 minutos)...");
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          finalData = data;
+          break;
         }
-      });
+      }
 
-      if (functionError) throw functionError;
-      if (!data.success) throw new Error(data.message || "Erro desconhecido");
-
-      setLastQuery({ tag: clean, period, minViews });
-      setActualResults(data.videos || []);
-      setNextCursor(data.nextCursor || null);
-      setSearched(true);
+      if (mySearchId === currentSearchId.current && finalData) {
+        setLastQuery({ tag: clean, period, minViews });
+        setActualResults(finalData.videos || []);
+        setNextCursor(finalData.nextCursor || null);
+        setSearched(true);
+      }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro ao buscar vídeos. Tente novamente mais tarde.");
+      if (mySearchId === currentSearchId.current) {
+        console.error(err);
+        setError(err.message || "Erro ao buscar vídeos. Tente novamente mais tarde.");
+      }
     } finally {
-      setLoading(false);
+      if (mySearchId === currentSearchId.current) {
+        setLoading(false);
+        setLoadingStatus("");
+      }
     }
   };
 
@@ -285,7 +315,7 @@ function HashtagPage() {
       {loading && (
         <div className="hs-loading">
           <div className="hs-loader-bar"><span /></div>
-          <p>Analisando vídeos em alta para essa hashtag...</p>
+          <p>{loadingStatus || "Analisando vídeos em alta para essa hashtag..."}</p>
         </div>
       )}
 

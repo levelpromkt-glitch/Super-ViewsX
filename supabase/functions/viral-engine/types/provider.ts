@@ -23,6 +23,7 @@ export interface ProviderResponse {
   quotaUsed?: number;
   meta?: any;
   nextCursor?: string;
+  status?: "polling" | "ready" | "error";
 }
 
 export interface SocialProvider {
