@@ -130,13 +130,13 @@ function HashtagPage() {
               onClick={() => setPlatform("youtube")}
               className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "youtube" ? "bg-red-500/10 text-red-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
-              <Youtube size={16} /> YouTube
+              <Video size={16} /> YouTube
             </button>
             <button
               onClick={() => setPlatform("instagram")}
               className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "instagram" ? "bg-pink-500/10 text-pink-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
-              <Instagram size={16} /> Instagram
+              <Camera size={16} /> Instagram
             </button>
           </div>
         </div>
