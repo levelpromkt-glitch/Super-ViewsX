@@ -1,6 +1,6 @@
-import { Video } from "../types/video.ts";
+import { ViralVideo } from "../types/provider.ts";
 
-export const mapToVideo = (processedRawVideo: any): Video => {
+export const mapToVideo = (processedRawVideo: any): ViralVideo => {
   const snippet = processedRawVideo.snippet || {};
   const stats = processedRawVideo.statistics || {};
   const contentDetails = processedRawVideo.contentDetails || {};

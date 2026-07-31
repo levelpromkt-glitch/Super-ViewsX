@@ -12,6 +12,8 @@ import {
   MessageCircle,
   Play,
   Search,
+  Youtube,
+  Instagram,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/hashtag")({
@@ -48,6 +50,7 @@ function viewsToSlider(views: number) {
 }
 
 function HashtagPage() {
+  const [platform, setPlatform] = useState<"youtube" | "instagram">("youtube");
   const [hashtag, setHashtag] = useState("");
   const [period, setPeriod] = useState<Period>("7d");
   const [sliderVal, setSliderVal] = useState(viewsToSlider(5000));
@@ -91,6 +94,7 @@ function HashtagPage() {
     try {
       const { data, error: functionError } = await supabase.functions.invoke('viral-engine', {
         body: {
+          platform,
           query: clean,
           period,
           minViews
@@ -118,6 +122,25 @@ function HashtagPage() {
 
       {/* Search card */}
       <section className="hs-panel">
+        
+        <div className="hs-field">
+          <label className="hs-label">Plataforma</label>
+          <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-white/5 w-fit gap-1">
+            <button
+              onClick={() => setPlatform("youtube")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "youtube" ? "bg-red-500/10 text-red-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              <Youtube size={16} /> YouTube
+            </button>
+            <button
+              onClick={() => setPlatform("instagram")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "instagram" ? "bg-pink-500/10 text-pink-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              <Instagram size={16} /> Instagram
+            </button>
+          </div>
+        </div>
+
         <div className="hs-field">
           <label className="hs-label">Hashtag e período</label>
           <div className="hs-search-row">
@@ -203,7 +226,7 @@ function HashtagPage() {
 
         <div className="hs-actions">
           <span className="hs-demo-note">
-            Minerando dados reais da API do YouTube
+            Minerando dados reais {platform === "youtube" ? "da API do YouTube" : "do Instagram"}
           </span>
           <button
             className="hs-btn-primary"
@@ -266,7 +289,14 @@ function HashtagPage() {
                     </span>
                   </div>
                   <div className="hs-card-body">
-                    <h3 className="hs-card-title">{v.title}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      {v.platform === "instagram" ? (
+                        <Instagram size={14} className="text-pink-500" />
+                      ) : (
+                        <Youtube size={14} className="text-red-500" />
+                      )}
+                      <h3 className="hs-card-title m-0">{v.title}</h3>
+                    </div>
                     <div className="hs-card-row">
                       <span className="hs-card-views">
                         <Eye size={12} /> {formatNumber(v.views)}

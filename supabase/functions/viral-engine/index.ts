@@ -4,7 +4,8 @@ import { logger } from "./utils/logger.ts";
 import { parsePeriodToISO } from "./utils/date.ts";
 import { parseQuery } from "./parsers/queryParser.ts";
 import { validateSearchRequest } from "./validators/requestValidator.ts";
-import { youtubeService } from "./services/youtubeService.ts";
+import { providerFactory } from "./providers/providerFactory.ts";
+import { cacheService } from "./services/cacheService.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,8 +31,41 @@ serve(async (req) => {
 
     logger.info("Starting viral mining", { query: parsedQuery, period: validatedRequest.period });
 
-    // 3. Service Orchestration
-    const { videos, quotaUsed } = await youtubeService.searchVideos(
+    // 3. Cache Check
+    const cachedData = await cacheService.get(
+      validatedRequest.platform,
+      parsedQuery,
+      validatedRequest.period,
+      validatedRequest.minViews
+    );
+
+    if (cachedData) {
+      logger.info("Cache hit", { query: parsedQuery, platform: validatedRequest.platform });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          search: {
+            type: "hashtag",
+            query: validatedRequest.query,
+            parsedQuery,
+            period: validatedRequest.period,
+            minViews: validatedRequest.minViews
+          },
+          meta: {
+            ...cachedData.meta,
+            executionTime: Date.now() - startTime,
+            cached: true,
+            totalResults: cachedData.videos.length
+          },
+          videos: cachedData.videos,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 4. Service Orchestration via Factory
+    const provider = providerFactory.getProvider(validatedRequest.platform);
+    const providerResponse = await provider.searchByHashtag(
       parsedQuery,
       publishedAfter,
       validatedRequest.maxResults,
@@ -40,7 +74,7 @@ serve(async (req) => {
 
     const executionTime = Date.now() - startTime;
 
-    // 4. Build Context-Rich Response
+    // 5. Build Context-Rich Response
     const responseBody = {
       success: true,
       search: {
@@ -51,15 +85,26 @@ serve(async (req) => {
         minViews: validatedRequest.minViews
       },
       meta: {
-        source: "youtube",
+        ...(providerResponse.meta || {}),
+        source: validatedRequest.platform,
         executionTime,
-        quotaUsed,
-        totalResults: videos.length
+        quotaUsed: providerResponse.quotaUsed,
+        totalResults: providerResponse.videos.length,
+        cached: false
       },
-      videos,
+      videos: providerResponse.videos,
     };
 
-    logger.info("Mining complete", { executionTime, quotaUsed, totalResults: videos.length });
+    // 6. Save to Cache
+    await cacheService.set(
+      validatedRequest.platform,
+      parsedQuery,
+      validatedRequest.period,
+      validatedRequest.minViews,
+      providerResponse
+    );
+
+    logger.info("Mining complete", { executionTime, platform: validatedRequest.platform, totalResults: providerResponse.videos.length });
 
     return new Response(
       JSON.stringify(responseBody),

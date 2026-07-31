@@ -3,9 +3,10 @@ import { processRawVideos } from "../processors/dataProcessor.ts";
 import { mapToVideo } from "../mappers/videoMapper.ts";
 import { analyzeViralPotential } from "../analyzers/viralAnalyzer.ts";
 import { YOUTUBE_CONSTANTS } from "../constants/youtube.ts";
+import { SocialProvider, ProviderResponse } from "../types/provider.ts";
 
-export const youtubeService = {
-  searchVideos: async (parsedQuery: string, publishedAfter: string, maxResults: number, minViews: number) => {
+export const youtubeProvider: SocialProvider = {
+  searchByHashtag: async (parsedQuery: string, publishedAfter: string, maxResults: number, minViews: number): Promise<ProviderResponse> => {
     // 1. Fetch Search Results
     const searchData = await youtubeClient.searchVideos(parsedQuery, publishedAfter, maxResults);
     

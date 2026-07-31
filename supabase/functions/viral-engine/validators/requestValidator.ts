@@ -14,11 +14,14 @@ export const validateSearchRequest = (body: any) => {
     throw new AppError(`Max results cannot exceed ${YOUTUBE_CONSTANTS.MAX_RESULTS_LIMIT}.`, "INVALID_MAX_RESULTS", 400);
   }
   
+  const platform = body.platform || "youtube";
+  
   return {
     query: body.query,
     period: body.period || "7d",
     minViews: body.minViews ? parseInt(body.minViews) : 0,
     maxResults,
+    platform,
   };
 };
 

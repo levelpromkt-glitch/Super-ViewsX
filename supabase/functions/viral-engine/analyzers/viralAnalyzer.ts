@@ -1,6 +1,6 @@
-import { Video } from "../types/video.ts";
+import { ViralVideo } from "../types/provider.ts";
 
-export const analyzeViralPotential = (video: Video): Video => {
+export const analyzeViralPotential = (video: ViralVideo): ViralVideo => {
   let score = 0;
   const reasons: string[] = [];
   
