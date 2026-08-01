@@ -16,7 +16,11 @@ export const tiktokProvider: SocialProvider = {
     const rawData = await sociaVaultClient.fetchInstagramHashtag(parsedQuery, maxResults || 50);
     
     let rawPosts: any[] = [];
-    if (rawData.data && rawData.data.posts) {
+    if (rawData.data && rawData.data.aweme_list) {
+      rawPosts = Object.values(rawData.data.aweme_list);
+    } else if (rawData.aweme_list) {
+      rawPosts = Object.values(rawData.aweme_list);
+    } else if (rawData.data && rawData.data.posts) {
       rawPosts = Object.values(rawData.data.posts);
     } else {
       rawPosts = rawData.posts || rawData.data || rawData.items || [];
@@ -26,55 +30,49 @@ export const tiktokProvider: SocialProvider = {
     const seenIds = new Set<string>();
 
     let mappedVideos: ViralVideo[] = rawPosts.map((post: any) => {
-      const views = post.video_view_count || post.play_count || 0;
-      const likes = post.like_count || 0;
-      const comments = post.comment_count || 0;
+      // TikTok mappings (aweme_list)
+      const isTikTok = !!post.aweme_id;
+      
+      const views = isTikTok ? (post.statistics?.play_count || 0) : (post.video_view_count || post.play_count || 0);
+      const likes = isTikTok ? (post.statistics?.digg_count || 0) : (post.like_count || 0);
+      const comments = isTikTok ? (post.statistics?.comment_count || 0) : (post.comment_count || 0);
+      
+      const id = post.aweme_id || post.id || post.shortcode || String(Math.random());
+      const author = isTikTok ? (post.author?.unique_id || post.author?.nickname) : (post.owner?.username || post.username);
+      const titleDesc = post.desc || post.caption || post.text || "";
+      const thumb = isTikTok ? (post.video?.cover?.url_list?.[0] || post.video?.origin_cover?.url_list?.[0]) : (post.display_url || post.thumbnail_src || post.image_url);
+      const url = isTikTok ? `https://www.tiktok.com/@${author}/video/${id}` : (post.shortcode ? `https://www.instagram.com/p/${post.shortcode}/` : (post.url || ""));
+      
+      const publishedAt = isTikTok && post.create_time 
+        ? new Date(post.create_time * 1000).toISOString()
+        : (post.taken_at_timestamp ? new Date(post.taken_at_timestamp * 1000).toISOString() : (post.created_at || new Date().toISOString()));
+
+      // Extract hashtags from description if textChallenge is missing
+      const extractedHashtags = (titleDesc.match(/#[\w]+/g) || []).map((h: string) => h.replace('#', ''));
+      const hashtags = Array.isArray(post.text_extra) ? post.text_extra.map((e: any) => e.hashtag_name).filter(Boolean) : extractedHashtags;
       
       return {
-        id: post.id || post.shortcode || String(Math.random()),
-        title: post.caption || post.text || "",
-        channel: post.owner?.username || post.username || "",
-        thumbnail: post.display_url || post.thumbnail_src || post.image_url || "",
-        url: post.shortcode ? `https://www.instagram.com/p/${post.shortcode}/` : (post.url || ""),
-        description: post.caption || post.text || "",
-        publishedAt: post.taken_at_timestamp 
-          ? new Date(post.taken_at_timestamp * 1000).toISOString() 
-          : (post.created_at || new Date().toISOString()),
+        id,
+        title: titleDesc,
+        channel: author || "",
+        thumbnail: thumb || "",
+        url: url,
+        description: titleDesc,
+        publishedAt,
         views,
         likes,
         comments,
-        duration: post.video_duration ? String(post.video_duration) : "",
-        hashtags: post.hashtags || [],
+        duration: isTikTok ? String(post.video?.duration || "") : (post.video_duration ? String(post.video_duration) : ""),
+        hashtags: hashtags || [],
         platform: "tiktok",
         viralMetrics: { score: 0, reasons: [] },
       };
     });
 
     const validVideos = mappedVideos.filter(v => {
-      // NOTE: Removed minViews filter for Instagram per user request.
-      // if (v.views < minViews) return false;
       if (new Date(v.publishedAt) < publishedAfterDate) return false;
       if (seenIds.has(v.id)) return false;
       
-      // Strict filter: only allow videos!
-      const rawPost = rawPosts.find((p: any) => p.id === v.id || p.shortcode === v.id);
-      let isVideo = false;
-      if (rawPost) {
-        const isVideoFlag = rawPost.is_video === true;
-        const typeStr = String(rawPost.type || "").toLowerCase();
-        const pTypeStr = String(rawPost.product_type || "").toLowerCase();
-        
-        isVideo = 
-          isVideoFlag ||
-          typeStr === "video" || 
-          pTypeStr === "clips" || 
-          pTypeStr === "igtv" || 
-          !!rawPost.video_url || 
-          !!rawPost.video_view_count;
-      }
-      
-      if (!isVideo) return false;
-
       // Strict hashtag filter: Social Vault API might return unrelated trending posts
       const lowerQuery = parsedQuery.toLowerCase();
       const hasHashtag = 
@@ -88,7 +86,8 @@ export const tiktokProvider: SocialProvider = {
     });
 
     const analyzedVideos = validVideos.map(analyzeViralPotential);
-    analyzedVideos.sort((a, b) => b.viralMetrics.score - a.viralMetrics.score);
+    // User requested sorting by views descending instead of viral score
+    analyzedVideos.sort((a, b) => b.views - a.views);
 
     if (analyzedVideos.length > maxResults) {
        analyzedVideos.length = maxResults;
