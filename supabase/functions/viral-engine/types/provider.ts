@@ -11,7 +11,7 @@ export interface ViralVideo {
   comments: number;
   duration: string;
   hashtags: string[];
-  platform: string;
+  platform: "youtube" | "tiktok";
   viralMetrics: {
     score: number;
     reasons: string[];

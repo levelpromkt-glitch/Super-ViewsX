@@ -1,6 +1,6 @@
 import { SocialProvider } from "../types/provider.ts";
 import { youtubeProvider } from "./youtubeProvider.ts";
-import { instagramProvider } from "./instagramProvider.ts";
+import { tiktokProvider } from "./tiktokProvider.ts";
 import { AppError } from "../utils/errorHandler.ts";
 
 export const providerFactory = {
@@ -8,8 +8,8 @@ export const providerFactory = {
     switch (platform.toLowerCase()) {
       case "youtube":
         return youtubeProvider;
-      case "instagram":
-        return instagramProvider;
+      case "tiktok":
+        return tiktokProvider;
       default:
         throw new AppError(`Plataforma não suportada: ${platform}`, "UNSUPPORTED_PLATFORM", 400);
     }

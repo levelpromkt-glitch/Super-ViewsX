@@ -3,7 +3,7 @@ import { SocialProvider, ProviderResponse, ViralVideo } from "../types/provider.
 import { analyzeViralPotential } from "../analyzers/viralAnalyzer.ts";
 import { logger } from "../utils/logger.ts";
 
-export const instagramProvider: SocialProvider = {
+export const tiktokProvider: SocialProvider = {
   searchByHashtag: async (
     parsedQuery: string,
     publishedAfter: string,
@@ -11,7 +11,7 @@ export const instagramProvider: SocialProvider = {
     minViews: number,
     cursor?: string
   ): Promise<ProviderResponse> => {
-    logger.info(`Starting Social Vault search for hashtag: ${parsedQuery}`);
+    logger.info(`Starting Social Vault search for hashtag on TikTok: ${parsedQuery}`);
     
     const rawData = await sociaVaultClient.fetchInstagramHashtag(parsedQuery, maxResults || 50);
     
@@ -45,7 +45,7 @@ export const instagramProvider: SocialProvider = {
         comments,
         duration: post.video_duration ? String(post.video_duration) : "",
         hashtags: post.hashtags || [],
-        platform: "instagram",
+        platform: "tiktok",
         viralMetrics: { score: 0, reasons: [] },
       };
     });
@@ -75,6 +75,14 @@ export const instagramProvider: SocialProvider = {
       
       if (!isVideo) return false;
 
+      // Strict hashtag filter: Social Vault API might return unrelated trending posts
+      const lowerQuery = parsedQuery.toLowerCase();
+      const hasHashtag = 
+        (v.description && v.description.toLowerCase().includes(lowerQuery)) ||
+        (v.hashtags && v.hashtags.some((h: string) => h.toLowerCase().includes(lowerQuery)));
+
+      if (!hasHashtag) return false;
+
       seenIds.add(v.id);
       return true;
     });
@@ -90,7 +98,7 @@ export const instagramProvider: SocialProvider = {
       videos: analyzedVideos,
       status: "ready",
       nextCursor: undefined, 
-      meta: { source: "socialvault", totalExtracted: rawPosts.length }
+      meta: { source: "socialvault", totalExtracted: rawPosts.length, debug_first_item: rawPosts[0] || null }
     };
   }
 };

@@ -13,7 +13,7 @@ import {
   Play,
   Search,
   Video,
-  Camera,
+  Music,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/hashtag")({
@@ -50,7 +50,7 @@ function viewsToSlider(views: number) {
 }
 
 function HashtagPage() {
-  const [platform, setPlatform] = useState<"youtube" | "instagram">("youtube");
+  const [platform, setPlatform] = useState<"youtube" | "tiktok">("youtube");
   const [hashtag, setHashtag] = useState("");
   const [period, setPeriod] = useState<Period>("7d");
   const [sliderVal, setSliderVal] = useState(viewsToSlider(5000));
@@ -198,10 +198,10 @@ function HashtagPage() {
               <Video size={16} /> YouTube
             </button>
             <button
-              onClick={() => setPlatform("instagram")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "instagram" ? "bg-pink-500/10 text-pink-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+              onClick={() => setPlatform("tiktok")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "tiktok" ? "bg-cyan-500/10 text-cyan-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
-              <Camera size={16} /> Instagram
+              <Music size={16} /> TikTok
             </button>
           </div>
         </div>
@@ -293,7 +293,7 @@ function HashtagPage() {
 
         <div className="hs-actions">
           <span className="hs-demo-note">
-            Minerando dados reais {platform === "youtube" ? "da API do YouTube" : "do Instagram"}
+            Minerando dados reais {platform === "youtube" ? "da API do YouTube" : "do TikTok"}
           </span>
           <button
             className="hs-btn-primary"
@@ -366,8 +366,8 @@ function HashtagPage() {
                   </div>
                   <div className="hs-card-body">
                     <div className="flex items-center gap-2 mb-1">
-                      {v.platform === "instagram" ? (
-                        <Camera size={14} className="text-pink-500" />
+                      {v.platform === "tiktok" ? (
+                        <Music size={14} className="text-cyan-500" />
                       ) : (
                         <Video size={14} className="text-red-500" />
                       )}
