@@ -172,8 +172,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .sidebar-upgrade-card .upgrade-title { font-size: .82rem; font-weight: 700; color: var(--text-main); margin-bottom: 4px; letter-spacing: -.01em; }
 .sidebar-upgrade-card .upgrade-title .highlight { color: var(--primary-lime); }
 .sidebar-upgrade-card .upgrade-text { font-size: .72rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px; }
-.sidebar-upgrade-card .btn-upgrade { width: 100%; padding: 8px 0; background: var(--primary-lime); border: none; border-radius: 8px; color: #050805; font-weight: 700; font-size: .78rem; cursor: pointer; transition: background .2s; font-family: inherit; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; }
-.sidebar-upgrade-card .btn-upgrade:hover { background: #B0FF55; }
+.sidebar-upgrade-card .btn-upgrade { width: 100%; padding: 8px 0; background: #FFFFFF; border: none; border-radius: 8px; color: #050805; font-weight: 700; font-size: .78rem; cursor: pointer; transition: background .2s; font-family: inherit; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.sidebar-upgrade-card .btn-upgrade:hover { background: #E5E7EB; }
 .sidebar-toggle-btn { position: fixed; left: 256px; top: 104px; transform: translateX(-50%); width: 28px; height: 28px; border-radius: 50%; background: var(--bg-card); border: var(--glass-border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); z-index: 15; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
 .sidebar-toggle-btn.collapsed { left: 100px; }
 .sidebar-toggle-btn:hover { color: var(--primary-lime); border-color: var(--border-hover); transform: translateX(-50%) scale(1.1); box-shadow: var(--shadow-glow); }
