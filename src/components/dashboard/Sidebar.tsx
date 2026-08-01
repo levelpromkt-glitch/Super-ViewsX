@@ -80,7 +80,7 @@ export function Sidebar({
     >
       <div className="sidebar-brand">
         {collapsed ? (
-          <span className="brand-logo-text"><span>SV</span></span>
+          <img src="/favicon.png" alt="SV" className="logo-img-small" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
         ) : (
           <img src="/logo.png" alt="Super Views X" className="logo-img" />
         )}
