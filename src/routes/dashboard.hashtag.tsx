@@ -190,16 +190,16 @@ function HashtagPage() {
         
         <div className="hs-field">
           <label className="hs-label">Plataforma</label>
-          <div className="flex bg-[#0A0A0A] p-1 rounded-md border border-[#333] w-fit gap-1">
+          <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-white/5 w-fit gap-1">
             <button
               onClick={() => setPlatform("youtube")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-[4px] transition-all text-sm font-medium ${platform === "youtube" ? "bg-[#333] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "youtube" ? "bg-red-500/10 text-red-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
               <Video size={16} /> YouTube
             </button>
             <button
               onClick={() => setPlatform("tiktok")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-[4px] transition-all text-sm font-medium ${platform === "tiktok" ? "bg-[#333] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "tiktok" ? "bg-cyan-500/10 text-cyan-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
               <Music size={16} /> TikTok
             </button>
