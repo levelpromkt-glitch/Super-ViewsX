@@ -174,7 +174,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .sidebar-upgrade-card .upgrade-text { font-size: .72rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px; }
 .sidebar-upgrade-card .btn-upgrade { width: 100%; padding: 8px 0; background: var(--primary-lime); border: none; border-radius: 8px; color: #050805; font-weight: 700; font-size: .78rem; cursor: pointer; transition: background .2s; font-family: inherit; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .sidebar-upgrade-card .btn-upgrade:hover { background: #B0FF55; }
-.sidebar-toggle-btn { position: fixed; left: 256px; top: 32px; transform: translateX(-50%); width: 28px; height: 28px; border-radius: 50%; background: var(--bg-card); border: var(--glass-border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); z-index: 15; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+.sidebar-toggle-btn { position: fixed; left: 256px; top: 104px; transform: translateX(-50%); width: 28px; height: 28px; border-radius: 50%; background: var(--bg-card); border: var(--glass-border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); z-index: 15; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
 .sidebar-toggle-btn.collapsed { left: 100px; }
 .sidebar-toggle-btn:hover { color: var(--primary-lime); border-color: var(--border-hover); transform: translateX(-50%) scale(1.1); box-shadow: var(--shadow-glow); }
 
@@ -381,8 +381,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .main-topbar .left h2 { font-size: .95rem; }
   .campaigns-wrapper { padding: 10px 10px 14px; }
   .campaigns-header, .tpl-header { margin-bottom: 12px; gap: 6px; }
-  .campaigns-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .tpl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px; }
+  .campaigns-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
   .admin-wrapper, .tpl-wrapper, .tr-page, .hs-page { padding: 10px; gap: 10px; }
   .tpl-card-body { padding: 8px 8px 10px; gap: 6px; }
   .tpl-card-name { font-size: .78rem; }
