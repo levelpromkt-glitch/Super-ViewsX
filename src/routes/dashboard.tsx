@@ -5,7 +5,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Columns2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
@@ -65,9 +65,7 @@ function DashboardLayout() {
           title="Recolher/Expandir"
           aria-label="Toggle sidebar"
         >
-          {isMobile ? (
-            <Columns2 size={18} strokeWidth={1.75} />
-          ) : (collapsed && !mobileOpen) ? (
+          {(isMobile && !mobileOpen) || (!isMobile && collapsed) ? (
             <ChevronRight size={16} />
           ) : (
             <ChevronLeft size={16} />
