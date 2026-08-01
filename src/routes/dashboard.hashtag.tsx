@@ -200,7 +200,7 @@ function HashtagPage() {
               }`}
             >
               <img 
-                src="/YOUTUBE LOGO.png" 
+                src="/youtube-logo.png" 
                 alt="YouTube" 
                 className={`w-5 h-5 object-contain transition-all duration-300 ${platform === "youtube" ? "scale-110 drop-shadow-[0_2px_8px_rgba(255,0,0,0.5)]" : "grayscale opacity-50"}`}
               />
@@ -215,7 +215,7 @@ function HashtagPage() {
               }`}
             >
               <img 
-                src="/Tiktok-PNG-Logo.png" 
+                src="/tiktok-logo.png" 
                 alt="TikTok" 
                 className={`w-5 h-5 object-contain transition-all duration-300 ${platform === "tiktok" ? "scale-110 drop-shadow-[0_2px_8px_rgba(0,255,255,0.4)]" : "grayscale opacity-50"}`}
               />
