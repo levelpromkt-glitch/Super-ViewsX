@@ -101,15 +101,17 @@ serve(async (req) => {
       status: providerResponse.status || "ready"
     };
 
-    // 6. Save to Cache
-    await cacheService.set(
-      validatedRequest.platform,
-      parsedQuery,
-      validatedRequest.period,
-      validatedRequest.minViews,
-      providerResponse,
-      validatedRequest.cursor
-    );
+    // 6. Save to Cache (only if ready)
+    if (providerResponse.status !== "polling") {
+      await cacheService.set(
+        validatedRequest.platform,
+        parsedQuery,
+        validatedRequest.period,
+        validatedRequest.minViews,
+        providerResponse,
+        validatedRequest.cursor
+      );
+    }
 
     logger.info("Mining complete", { executionTime, platform: validatedRequest.platform, totalResults: providerResponse.videos.length });
 

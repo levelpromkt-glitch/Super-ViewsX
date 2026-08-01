@@ -5,3 +5,9 @@ export const getEnv = (key: string): string => {
   }
   return value;
 };
+
+export const env = {
+  SOCIAVAULT_API_KEY: Deno.env.get("SOCIAVAULT_API_KEY"),
+  SOCIAVAULT_URL: Deno.env.get("SOCIAVAULT_URL"),
+  APIFY_API_TOKEN: Deno.env.get("APIFY_API_TOKEN"),
+};

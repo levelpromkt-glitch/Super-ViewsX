@@ -122,7 +122,7 @@ function HashtagPage() {
 
         if (data.status === "polling") {
           currentCursor = data.nextCursor;
-          setLoadingStatus("Minerando vídeos na Bright Data (Isso pode levar de 1 a 2 minutos)...");
+          setLoadingStatus("Minerando vídeos no Apify (Isso pode levar de 1 a 2 minutos)...");
           await new Promise(r => setTimeout(r, 5000));
         } else {
           finalData = data;

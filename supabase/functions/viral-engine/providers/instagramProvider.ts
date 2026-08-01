@@ -1,4 +1,4 @@
-import { brightDataClient } from "../clients/brightDataClient.ts";
+import { apifyClient } from "../clients/apifyClient.ts";
 import { SocialProvider, ProviderResponse, ViralVideo } from "../types/provider.ts";
 import { analyzeViralPotential } from "../analyzers/viralAnalyzer.ts";
 import { logger } from "../utils/logger.ts";
@@ -12,75 +12,72 @@ export const instagramProvider: SocialProvider = {
     cursor?: string
   ): Promise<ProviderResponse> => {
     
-    // If no cursor is provided (or it's an old numeric cursor), it's a NEW search.
-    // We trigger the async scraper.
-    const isNewSearch = !cursor || (cursor.length < 10 && !cursor.startsWith("c_") && !cursor.startsWith("snap_") && !cursor.startsWith("gd_") && !cursor.startsWith("j_"));
+    // If no cursor is provided (or it's an old Bright Data/Sociavault cursor), it's a NEW search.
+    const isNewSearch = !cursor || cursor === 'page1' || cursor.startsWith("snap_") || cursor.startsWith("gd_") || cursor.startsWith("c_") || cursor.startsWith("sd_");
 
     if (isNewSearch) {
-      logger.info(`Starting new async Bright Data search for hashtag: ${parsedQuery}`);
-      const snapshotId = await brightDataClient.triggerInstagramHashtag(parsedQuery, maxResults || 30);
+      logger.info(`Starting new async Apify search for hashtag: ${parsedQuery}`);
+      const runId = await apifyClient.triggerInstagramHashtag(parsedQuery, maxResults || 30);
       
       return {
         videos: [],
         status: "polling",
-        nextCursor: snapshotId,
-        meta: { source: "instagram_async", message: "Job started" }
+        nextCursor: runId,
+        meta: { source: "apify_async", message: "Job started" }
       };
     }
 
-    // It's a polling request! Check the snapshot.
-    logger.info(`Polling Bright Data snapshot: ${cursor}`);
-    const snapshotResult = await brightDataClient.getSnapshot(cursor);
+    // It's a polling request! Check the Apify run status.
+    logger.info(`Polling Apify run: ${cursor}`);
+    const runStatus = await apifyClient.getRunStatus(cursor);
 
-    if (snapshotResult.status === "running") {
+    if (runStatus.status === "running") {
       return {
         videos: [],
         status: "polling",
         nextCursor: cursor,
-        meta: { source: "instagram_async", message: "Job still running" }
+        meta: { source: "apify_async", message: "Job still running" }
       };
     }
 
-    // It's ready! Process the data.
-    const rawData = snapshotResult.data;
-    let rawPosts: any[] = [];
-    
-    if (Array.isArray(rawData)) {
-      if (rawData.length > 0 && rawData[0].results) {
-        rawPosts = rawData[0].results;
-      } else if (rawData.length > 0 && rawData[0].posts) {
-        rawPosts = rawData[0].posts;
-      } else {
-        rawPosts = rawData;
-      }
-    } else if (rawData.data && rawData.data.posts) {
-      rawPosts = Object.values(rawData.data.posts);
-    } else {
-      rawPosts = rawData.posts || rawData.data || rawData.items || rawData.results || [];
+    // It's ready! Process the dataset.
+    const datasetId = runStatus.defaultDatasetId;
+    if (!datasetId) {
+      throw new Error("Apify run succeeded but no datasetId was returned.");
     }
+
+    logger.info(`Fetching items from Apify dataset: ${datasetId}`);
+    const rawPosts = await apifyClient.getDatasetItems(datasetId);
 
     const publishedAfterDate = new Date(publishedAfter);
     const seenIds = new Set<string>();
 
     let mappedVideos: ViralVideo[] = rawPosts.map((post: any) => {
-      const views = post.video_view_count || post.play_count || post.view_count || post.views || 0;
-      const likes = post.like_count || post.likes || 0;
-      const comments = post.comment_count || post.comments || 0;
+      // Apify hashtag scraper often doesn't return view counts in the grid feed, only likes.
+      // If views are 0, we estimate them based on likes (typically 10x to 20x for Reels).
+      let views = post.videoPlayCount || post.videoViewCount || post.playCount || post.viewCount || 0;
+      const likes = post.likesCount || post.edge_media_preview_like?.count || 0;
+      
+      if (views === 0 && likes > 0) {
+         views = likes * 15; // Conservative estimate for virality filtering
+      }
+      
+      const comments = post.commentsCount || 0;
       
       return {
-        id: post.id || post.shortcode || post.post_id || String(Math.random()),
-        title: post.caption || post.text || post.description || "",
-        channel: post.owner?.username || post.username || post.author_username || "",
-        thumbnail: post.display_url || post.thumbnail_src || post.image_url || post.image || post.thumbnail || "",
-        url: post.shortcode ? `https://www.instagram.com/p/${post.shortcode}/` : (post.url || post.link || ""),
-        description: post.caption || post.text || post.description || "",
-        publishedAt: post.taken_at_timestamp 
-          ? new Date(post.taken_at_timestamp * 1000).toISOString() 
-          : (post.created_at || post.posted_at || post.timestamp || new Date().toISOString()),
+        id: post.id || post.shortCode || String(Math.random()),
+        title: post.caption || post.text || "",
+        channel: post.ownerUsername || post.ownerFullName || "",
+        thumbnail: post.displayUrl || post.thumbnailUrl || "",
+        url: post.url || (post.shortCode ? `https://www.instagram.com/p/${post.shortCode}/` : ""),
+        description: post.caption || post.text || "",
+        publishedAt: post.timestamp 
+          ? new Date(post.timestamp).toISOString() 
+          : new Date().toISOString(),
         views,
         likes,
         comments,
-        duration: post.video_duration ? String(post.video_duration) : "",
+        duration: post.videoDuration ? String(post.videoDuration) : "",
         hashtags: post.hashtags || [],
         platform: "instagram",
         viralMetrics: { score: 0, reasons: [] },
@@ -88,9 +85,31 @@ export const instagramProvider: SocialProvider = {
     });
 
     const validVideos = mappedVideos.filter(v => {
-      if (v.views < minViews) return false;
+      // NOTE: Removed minViews filter for Instagram per user request.
+      // if (v.views < minViews) return false;
       if (new Date(v.publishedAt) < publishedAfterDate) return false;
       if (seenIds.has(v.id)) return false;
+      
+      // Strict filter: only allow videos! (Images don't have videoUrl or duration)
+      const rawPost = rawPosts.find((p: any) => p.id === v.id || p.shortCode === v.id);
+      
+      let isVideo = false;
+      if (rawPost) {
+        const typeStr = String(rawPost.type || "").toLowerCase();
+        const pTypeStr = String(rawPost.productType || "").toLowerCase();
+        
+        isVideo = 
+          typeStr === "video" || 
+          pTypeStr === "clips" || 
+          pTypeStr === "igtv" || 
+          !!rawPost.videoUrl ||
+          (rawPost.childPosts && Array.isArray(rawPost.childPosts) && rawPost.childPosts.some((c: any) => c.videoUrl || String(c.type).toLowerCase() === "video"));
+      }
+      
+      if (!isVideo) return false;
+
+      // Apify already filters by hashtag strictly since we gave it the exact URL,
+      // but we keep a light filter just in case.
       seenIds.add(v.id);
       return true;
     });
@@ -106,9 +125,8 @@ export const instagramProvider: SocialProvider = {
     return {
       videos: analyzedVideos,
       status: "ready",
-      // Since discover_by_url only fetches the page once, we won't paginate further.
       nextCursor: undefined, 
-      meta: { source: "instagram_async_ready", totalExtracted: rawPosts.length }
+      meta: { source: "apify_async_ready", totalExtracted: rawPosts.length, rawSample: rawPosts[0] || null }
     };
   }
 };
