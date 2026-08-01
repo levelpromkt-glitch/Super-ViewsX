@@ -190,18 +190,36 @@ function HashtagPage() {
         
         <div className="hs-field">
           <label className="hs-label">Plataforma</label>
-          <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-white/5 w-fit gap-1">
+          <div className="flex bg-[#0A0D0C] p-1 rounded-full border border-white/10 w-fit gap-1 shadow-inner">
             <button
               onClick={() => setPlatform("youtube")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "youtube" ? "bg-red-500/10 text-red-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+              className={`flex items-center gap-2.5 px-6 py-2.5 rounded-full transition-all duration-300 text-[0.82rem] font-bold tracking-wide ${
+                platform === "youtube" 
+                  ? "bg-zinc-800/90 text-white shadow-[0_4px_12px_rgba(0,0,0,0.6)] border border-white/10" 
+                  : "text-zinc-500 hover:text-zinc-300 border border-transparent"
+              }`}
             >
-              <Video size={16} /> YouTube
+              <img 
+                src="/YOUTUBE LOGO.png" 
+                alt="YouTube" 
+                className={`w-5 h-5 object-contain transition-all duration-300 ${platform === "youtube" ? "scale-110 drop-shadow-[0_2px_8px_rgba(255,0,0,0.5)]" : "grayscale opacity-50"}`}
+              />
+              YouTube
             </button>
             <button
               onClick={() => setPlatform("tiktok")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium ${platform === "tiktok" ? "bg-cyan-500/10 text-cyan-500 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+              className={`flex items-center gap-2.5 px-6 py-2.5 rounded-full transition-all duration-300 text-[0.82rem] font-bold tracking-wide ${
+                platform === "tiktok" 
+                  ? "bg-zinc-800/90 text-white shadow-[0_4px_12px_rgba(0,0,0,0.6)] border border-white/10" 
+                  : "text-zinc-500 hover:text-zinc-300 border border-transparent"
+              }`}
             >
-              <Music size={16} /> TikTok
+              <img 
+                src="/Tiktok-PNG-Logo.png" 
+                alt="TikTok" 
+                className={`w-5 h-5 object-contain transition-all duration-300 ${platform === "tiktok" ? "scale-110 drop-shadow-[0_2px_8px_rgba(0,255,255,0.4)]" : "grayscale opacity-50"}`}
+              />
+              TikTok
             </button>
           </div>
         </div>
