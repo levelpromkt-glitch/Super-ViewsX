@@ -264,30 +264,32 @@ function HashtagPage() {
         </div>
 
 
-        <div className="hs-field">
-          <div className="hs-label-row">
-            <label className="hs-label">Mínimo de views</label>
-            <span className="hs-min-tag">{formatNumber(minViews)} views</span>
+        {platform === "youtube" && (
+          <div className="hs-field">
+            <div className="hs-label-row">
+              <label className="hs-label">Mínimo de views</label>
+              <span className="hs-min-tag">{formatNumber(minViews)} views</span>
+            </div>
+            <div className="hs-slider-wrap">
+              <input
+                className="hs-slider"
+                type="range"
+                min={0}
+                max={100}
+                value={sliderVal}
+                onChange={(e) => onSlider(Number(e.target.value))}
+                style={{ ["--val" as string]: `${sliderVal}%` }}
+              />
+              <span
+                className="hs-slider-bubble"
+                style={{ left: `${sliderVal}%` }}
+                aria-hidden="true"
+              >
+                {formatNumber(minViews)}
+              </span>
+            </div>
           </div>
-          <div className="hs-slider-wrap">
-            <input
-              className="hs-slider"
-              type="range"
-              min={0}
-              max={100}
-              value={sliderVal}
-              onChange={(e) => onSlider(Number(e.target.value))}
-              style={{ ["--val" as string]: `${sliderVal}%` }}
-            />
-            <span
-              className="hs-slider-bubble"
-              style={{ left: `${sliderVal}%` }}
-              aria-hidden="true"
-            >
-              {formatNumber(minViews)}
-            </span>
-          </div>
-        </div>
+        )}
 
         <div className="hs-actions">
           <span className="hs-demo-note">
@@ -327,8 +329,12 @@ function HashtagPage() {
               <strong>{results.length}</strong>{" "}
               {results.length === 1 ? "vídeo" : "vídeos"} ·{" "}
               <strong>{lastQuery.tag.startsWith('#') ? lastQuery.tag : `#${lastQuery.tag}`}</strong> · últimos{" "}
-              <strong>{periodLabel}</strong> · mín.{" "}
-              <strong>{formatNumber(lastQuery.minViews)} views</strong>
+              <strong>{periodLabel}</strong>
+              {platform === "youtube" && (
+                <>
+                  {" "}· mín. <strong>{formatNumber(lastQuery.minViews)} views</strong>
+                </>
+              )}
             </span>
           </div>
 

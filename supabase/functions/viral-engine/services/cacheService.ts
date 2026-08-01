@@ -17,7 +17,7 @@ const generateCacheKey = async (text: string) => {
 export const cacheService = {
   get: async (platform: string, query: string, period: string, minViews: number, cursor?: string): Promise<ProviderResponse | null> => {
     try {
-      const keyString = `v15-${platform}-${query}-${period}-${minViews}-${cursor || 'page1'}`;
+      const keyString = `v16-${platform}-${query}-${period}-${minViews}-${cursor || 'page1'}`;
       const cacheKey = await generateCacheKey(keyString);
       
       const { data, error } = await supabase
@@ -45,7 +45,7 @@ export const cacheService = {
   
   set: async (platform: string, query: string, period: string, minViews: number, response: ProviderResponse, cursor?: string) => {
     try {
-      const keyString = `v15-${platform}-${query}-${period}-${minViews}-${cursor || 'page1'}`;
+      const keyString = `v16-${platform}-${query}-${period}-${minViews}-${cursor || 'page1'}`;
       const cacheKey = await generateCacheKey(keyString);
       
       await supabase
