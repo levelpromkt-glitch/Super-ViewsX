@@ -381,8 +381,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .main-topbar .left h2 { font-size: .95rem; }
   .campaigns-wrapper { padding: 10px 10px 14px; }
   .campaigns-header, .tpl-header { margin-bottom: 12px; gap: 6px; }
-  .campaigns-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  .campaigns-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tpl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px; }
+  
+  .campaign-info .budget-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-top: 6px;
+  }
+  .campaign-info .budget { font-size: .85rem; }
+  .campaign-info .promoter { font-size: .65rem; line-height: 1.2; text-align: left; }
+  .campaign-info .platform-icons { gap: 4px; margin-bottom: 6px; }
+  .campaign-info .platform-icons .platform-label { font-size: .55rem; padding: 2px 4px; }
   .admin-wrapper, .tpl-wrapper, .tr-page, .hs-page { padding: 10px; gap: 10px; }
   .tpl-card-body { padding: 8px 8px 10px; gap: 6px; }
   .tpl-card-name { font-size: .78rem; }
