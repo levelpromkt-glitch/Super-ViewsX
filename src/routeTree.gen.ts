@@ -19,6 +19,7 @@ import { Route as DashboardConfiguracoesRouteImport } from './routes/dashboard.c
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
 import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
+import { Route as DashboardPublicarRouteImport } from './routes/dashboard.publicar'
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
 import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
@@ -75,6 +76,11 @@ const DashboardPlanosRoute = DashboardPlanosRouteImport.update({
   path: '/planos',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardPublicarRoute = DashboardPublicarRouteImport.update({
+  id: '/publicar',
+  path: '/publicar',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardTemplatesRoute = DashboardTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
+  '/dashboard/publicar': typeof DashboardPublicarRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
+  '/dashboard/publicar': typeof DashboardPublicarRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
+  '/dashboard/publicar': typeof DashboardPublicarRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
+    | '/dashboard/publicar'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
+    | '/dashboard/publicar'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
+    | '/dashboard/publicar'
     | '/dashboard/templates'
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardPlanosRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/publicar': {
+      id: '/dashboard/publicar'
+      path: '/publicar'
+      fullPath: '/dashboard/publicar'
+      preLoaderRoute: typeof DashboardPublicarRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/templates': {
       id: '/dashboard/templates'
       path: '/templates'
@@ -326,6 +345,7 @@ interface DashboardRouteChildren {
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
   DashboardPlanosRoute: typeof DashboardPlanosRoute
+  DashboardPublicarRoute: typeof DashboardPublicarRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRoute
   DashboardTopPlayersRoute: typeof DashboardTopPlayersRoute
   DashboardTranscricaoRoute: typeof DashboardTranscricaoRoute
@@ -338,6 +358,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,
   DashboardPlanosRoute: DashboardPlanosRoute,
+  DashboardPublicarRoute: DashboardPublicarRoute,
   DashboardTemplatesRoute: DashboardTemplatesRoute,
   DashboardTopPlayersRoute: DashboardTopPlayersRoute,
   DashboardTranscricaoRoute: DashboardTranscricaoRoute,
