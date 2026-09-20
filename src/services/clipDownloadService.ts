@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 export class ClipDownloadError extends Error {
   constructor(message: string, public code: string) {
@@ -10,21 +9,32 @@ export class ClipDownloadError extends Error {
 
 export const ClipDownloadService = {
   async downloadClip(videoId: string, start: number, end: number, filename: string): Promise<void> {
-    const { data, error } = await supabase.functions.invoke("clip-video", {
-      body: { videoId, start, end },
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token || anonKey;
+
+    // supabase-js's functions.invoke() decides how to parse the response body
+    // from its content-type, which is unreliable for a binary video/mp4
+    // response — it's not guaranteed to hand back a Blob. Fetch directly so
+    // we control exactly how the response is read.
+    const response = await fetch(`${supabaseUrl}/functions/v1/clip-video`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "apikey": anonKey,
+        "authorization": `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ videoId, start, end }),
     });
 
-    if (error) {
-      const message = await readEdgeFunctionErrorMessage(error, "Erro ao gerar o corte.");
-      throw new ClipDownloadError(message, "FUNCTION_ERROR");
-    }
+    const contentType = response.headers.get("content-type") || "";
 
-    // On failure the function returns a JSON error body instead of a video blob.
-    if (!(data instanceof Blob) || data.type.includes("json")) {
+    if (!response.ok || contentType.includes("json")) {
       let message = "Não foi possível gerar o corte do vídeo.";
       try {
-        const text = data instanceof Blob ? await data.text() : JSON.stringify(data);
-        const parsed = JSON.parse(text);
+        const parsed = await response.json();
         if (parsed?.message) message = parsed.message;
       } catch {
         // keep default message
@@ -32,7 +42,8 @@ export const ClipDownloadService = {
       throw new ClipDownloadError(message, "CLIP_FAILED");
     }
 
-    const objectUrl = URL.createObjectURL(data);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objectUrl;
     a.download = filename;
