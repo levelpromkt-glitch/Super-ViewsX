@@ -26,7 +26,15 @@ export const youtubeProvider: SocialProvider = {
     // 3. Pipeline
     const processedRaw = processRawVideos(rawVideos);
     let mappedVideos = processedRaw.map(mapToVideo);
-    
+
+    // Keep only videos that genuinely use the searched hashtag (YouTube's search
+    // API does loose free-text matching on title/description/tags, which lets in
+    // unrelated videos that merely mention the term once).
+    const normalizedTag = parsedQuery.toLowerCase().replace(/^#/, "");
+    mappedVideos = mappedVideos.filter(v =>
+      v.hashtags.some((h: string) => h.toLowerCase().replace(/^#/, "") === normalizedTag)
+    );
+
     if (minViews > 0) {
       mappedVideos = mappedVideos.filter(v => v.views >= minViews);
     }

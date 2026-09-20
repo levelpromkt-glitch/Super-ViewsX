@@ -12,6 +12,8 @@ export const youtubeClient = {
     url.searchParams.set("maxResults", maxResults.toString());
     url.searchParams.set("publishedAfter", publishedAfter);
     url.searchParams.set("order", "viewCount");
+    url.searchParams.set("regionCode", "BR");
+    url.searchParams.set("relevanceLanguage", "pt");
     url.searchParams.set("key", apiKey);
 
     const response = await fetch(url.toString());
