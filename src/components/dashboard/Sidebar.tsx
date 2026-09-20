@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowUpRight, Trophy, TrendingUp, Flame, Settings } from "lucide-react";
+import { ArrowUpRight, Trophy, TrendingUp, Flame, Settings, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 // Ícone customizado para Transcrição (balão de fala com caractere)
@@ -46,6 +46,7 @@ const TemplatesIcon = ({ size = 20, className }: { size?: number; className?: st
 const items = [
   { to: "/dashboard", label: "Campanhas", icon: Trophy, exact: true, adminOnly: false, pro: false },
   { to: "/dashboard/transcricao", label: "Transcrição", icon: TranscricaoIcon, exact: false, adminOnly: false, pro: false },
+  { to: "/dashboard/melhores-momentos", label: "Melhores Momentos", icon: Sparkles, exact: false, adminOnly: false, pro: false },
   { to: "/dashboard/hashtag", label: "Pesquisar Hashtag", icon: TrendingUp, exact: false, adminOnly: false, pro: false },
   { to: "/dashboard/top-players", label: "Top Players", icon: Flame, exact: false, adminOnly: false, pro: true },
   { to: "/dashboard/templates", label: "Templates", icon: TemplatesIcon, exact: false, adminOnly: false, pro: true },

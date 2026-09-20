@@ -14,6 +14,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
+import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
 import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
@@ -44,6 +45,12 @@ const DashboardHashtagRoute = DashboardHashtagRouteImport.update({
   path: '/hashtag',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardMelhoresMomentosRoute =
+  DashboardMelhoresMomentosRouteImport.update({
+    id: '/melhores-momentos',
+    path: '/melhores-momentos',
+    getParentRoute: () => DashboardRoute,
+  } as any)
 const DashboardPlanosRoute = DashboardPlanosRouteImport.update({
   id: '/planos',
   path: '/planos',
@@ -70,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -80,6 +88,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -92,6 +101,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
+  '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/admin'
     | '/dashboard/hashtag'
+    | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard/admin'
     | '/dashboard/hashtag'
+    | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -126,6 +138,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/admin'
     | '/dashboard/hashtag'
+    | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
     | '/dashboard/templates'
     | '/dashboard/top-players'
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardHashtagRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/melhores-momentos': {
+      id: '/dashboard/melhores-momentos'
+      path: '/melhores-momentos'
+      fullPath: '/dashboard/melhores-momentos'
+      preLoaderRoute: typeof DashboardMelhoresMomentosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/planos': {
       id: '/dashboard/planos'
       path: '/planos'
@@ -209,6 +229,7 @@ declare module '@tanstack/react-router' {
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
+  DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
   DashboardPlanosRoute: typeof DashboardPlanosRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRoute
   DashboardTopPlayersRoute: typeof DashboardTopPlayersRoute
@@ -219,6 +240,7 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
+  DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,
   DashboardPlanosRoute: DashboardPlanosRoute,
   DashboardTemplatesRoute: DashboardTemplatesRoute,
   DashboardTopPlayersRoute: DashboardTopPlayersRoute,
