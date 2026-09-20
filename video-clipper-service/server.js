@@ -63,7 +63,7 @@ app.post("/clip", (req, res) => {
     "--no-playlist",
     "--download-sections", `*${s}-${e}`,
     "--force-keyframes-at-cuts",
-    "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
+    "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/best[height<=1080]",
     "--merge-output-format", "mp4",
     "-o", outputTemplate,
     url,
