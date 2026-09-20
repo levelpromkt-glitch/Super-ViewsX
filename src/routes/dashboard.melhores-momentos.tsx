@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Anchor,
   ArrowRight,
   ArrowUpRight,
+  CheckCircle2,
   ChevronDown,
   Clock,
   Download,
@@ -11,6 +12,7 @@ import {
   Link2,
   Loader2,
   Play,
+  Send,
   Sparkles,
   X,
 } from "lucide-react";
@@ -22,6 +24,7 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
+import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "30-60", label: "30s a 1 minuto" },
@@ -85,6 +88,19 @@ function MelhoresMomentosPage() {
   const [viralHook, setViralHook] = useState(false);
   const durationRef = useRef<HTMLDivElement>(null);
 
+  const [tiktokConnected, setTiktokConnected] = useState<boolean | null>(null);
+  const [publishTarget, setPublishTarget] = useState<ViralMoment | null>(null);
+  const [captionDraft, setCaptionDraft] = useState("");
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishedIds, setPublishedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    SocialAccountsService.listConnected()
+      .then((accounts) => setTiktokConnected(accounts.some((a) => a.platform === "tiktok")))
+      .catch(() => setTiktokConnected(false));
+  }, []);
+
   useEffect(() => {
     if (!durationOpen) return;
     const onDoc = (e: MouseEvent) => {
@@ -146,6 +162,27 @@ function MelhoresMomentosPage() {
       );
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleOpenPublish = (m: ViralMoment) => {
+    setPublishError(null);
+    setPublishTarget(m);
+    setCaptionDraft(m.title);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!videoId || !publishTarget) return;
+    setPublishError(null);
+    setPublishingId(publishTarget.id);
+    try {
+      await SocialAccountsService.publishToTikTok(videoId, publishTarget.start, publishTarget.end, captionDraft);
+      setPublishedIds((prev) => new Set(prev).add(publishTarget.id));
+      setPublishTarget(null);
+    } catch (error: any) {
+      setPublishError(error instanceof SocialAccountsError ? error.message : "Erro inesperado ao publicar no TikTok.");
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -279,6 +316,50 @@ function MelhoresMomentosPage() {
         </section>
       )}
 
+      {/* Inline publish panel */}
+      {publishTarget && (
+        <section className="tr-card tr-fade">
+          <div className="tr-card-head">
+            <Send size={18} className="tr-icon-lime" />
+            <h2>Publicar no TikTok</h2>
+            <button
+              className="hs-btn-ghost"
+              style={{ marginLeft: "auto", flex: "none" }}
+              onClick={() => setPublishTarget(null)}
+            >
+              <X size={12} /> Fechar
+            </button>
+          </div>
+          <div className="tr-field" style={{ padding: "0 20px 20px" }}>
+            <label className="hs-label">Legenda</label>
+            <textarea
+              className="tr-input"
+              style={{ width: "100%", minHeight: 80, resize: "vertical", fontFamily: "inherit" }}
+              value={captionDraft}
+              maxLength={150}
+              onChange={(e) => setCaptionDraft(e.target.value)}
+            />
+            {publishError && <div className="tr-error">{publishError}</div>}
+            <button
+              className="btn-primary tr-btn-main"
+              style={{ marginTop: 12 }}
+              onClick={handleConfirmPublish}
+              disabled={publishingId === publishTarget.id}
+            >
+              {publishingId === publishTarget.id ? (
+                <>
+                  <Loader2 size={16} className="tr-spin" /> Publicando...
+                </>
+              ) : (
+                <>
+                  <Send size={16} /> Publicar agora
+                </>
+              )}
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Results */}
       {!loading && moments && (
         <>
@@ -366,6 +447,19 @@ function MelhoresMomentosPage() {
                       >
                         <ArrowUpRight size={12} /> Abrir no YouTube
                       </a>
+                      {tiktokConnected === false ? (
+                        <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
+                          <Send size={12} /> Conectar TikTok
+                        </Link>
+                      ) : publishedIds.has(m.id) ? (
+                        <span className="hs-btn-ghost" style={{ color: "var(--primary-lime)", cursor: "default" }}>
+                          <CheckCircle2 size={12} /> Publicado
+                        </span>
+                      ) : (
+                        <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={tiktokConnected === null}>
+                          <Send size={12} /> Publicar no TikTok
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>

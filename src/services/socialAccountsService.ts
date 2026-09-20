@@ -53,4 +53,18 @@ export const SocialAccountsService = {
     }
     return data.platformUsername as string;
   },
+
+  async publishToTikTok(videoId: string, start: number, end: number, caption: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("tiktok-publish", {
+      body: { videoId, start, end, caption },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no TikTok.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao publicar no TikTok.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.publishId as string;
+  },
 };
