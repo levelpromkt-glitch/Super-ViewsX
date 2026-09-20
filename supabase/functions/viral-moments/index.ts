@@ -149,7 +149,8 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
-    const rawText: string = aiData?.content?.[0]?.text || '';
+    const textBlock = (aiData?.content || []).find((b: any) => b.type === 'text');
+    const rawText: string = textBlock?.text || '';
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
