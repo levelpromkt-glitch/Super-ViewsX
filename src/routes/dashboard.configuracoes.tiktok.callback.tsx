@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -9,7 +9,6 @@ export const Route = createFileRoute("/dashboard/configuracoes/tiktok/callback")
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
 
 function TikTokCallbackPage() {
-  const navigate = useNavigate();
   const ran = useRef(false);
 
   useEffect(() => {
@@ -21,12 +20,11 @@ function TikTokCallbackPage() {
     const state = params.get("state");
     const tiktokError = params.get("error");
 
+    // A full window.location navigation (not the router's navigate()) so there's
+    // no race between our query params and the router's own history write.
     const finish = (search: Record<string, string>) => {
       const query = new URLSearchParams(search).toString();
-      navigate({ to: "/dashboard/configuracoes", replace: true });
-      // navigate() above doesn't carry raw query params without a route search
-      // schema, so append them the same way the settings page already reads them.
-      window.history.replaceState({}, "", `/dashboard/configuracoes?${query}`);
+      window.location.replace(`/dashboard/configuracoes?${query}`);
     };
 
     if (tiktokError) {
@@ -44,7 +42,7 @@ function TikTokCallbackPage() {
         const message = err instanceof SocialAccountsError ? err.message : "Erro ao concluir a conexão.";
         finish({ tiktok: "error", message });
       });
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="hs-page">
