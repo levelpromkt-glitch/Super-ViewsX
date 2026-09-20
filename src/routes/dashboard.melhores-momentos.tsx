@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Clock,
+  Download,
   Flame,
   Link2,
   Loader2,
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
 import { ViralMomentsService, ViralMomentsError, ViralMoment } from "@/services/viralMomentsService";
+import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -58,6 +60,8 @@ function MelhoresMomentosPage() {
   const [loadingStatus, setLoadingStatus] = useState("");
   const [moments, setMoments] = useState<ViralMoment[] | null>(null);
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     const id = extractYouTubeId(url);
@@ -94,6 +98,21 @@ function MelhoresMomentosPage() {
     } finally {
       setLoading(false);
       setLoadingStatus("");
+    }
+  };
+
+  const handleDownload = async (m: ViralMoment) => {
+    if (!videoId) return;
+    setDownloadError(null);
+    setDownloadingId(m.id);
+    try {
+      await ClipDownloadService.downloadClip(videoId, m.start, m.end, `${videoId}-${m.start}-${m.end}.mp4`);
+    } catch (error: any) {
+      setDownloadError(
+        error instanceof ClipDownloadError ? error.message : "Erro inesperado ao baixar o corte."
+      );
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -141,7 +160,7 @@ function MelhoresMomentosPage() {
         </div>
         {urlError && <div className="tr-error">{urlError}</div>}
         <p className="hs-disclaimer">
-          Fase 1: identificamos os melhores momentos com IA. O corte automático do arquivo de vídeo pronto pra baixar chega em breve.
+          Use esta ferramenta como fonte de inspiração. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
         </p>
       </section>
 
@@ -189,6 +208,7 @@ function MelhoresMomentosPage() {
               <strong>{moments.length}</strong> {moments.length === 1 ? "momento encontrado" : "momentos encontrados"} · ordenados por potencial viral
             </span>
           </div>
+          {downloadError && <div className="tr-error">{downloadError}</div>}
 
           {moments.length === 0 ? (
             <div className="hs-empty">
@@ -231,6 +251,21 @@ function MelhoresMomentosPage() {
                     <div className="hs-card-actions">
                       <button className="hs-btn-ghost" onClick={() => setActiveMoment(m)}>
                         <Play size={12} /> Assistir trecho
+                      </button>
+                      <button
+                        className="hs-btn-ghost"
+                        onClick={() => handleDownload(m)}
+                        disabled={downloadingId === m.id}
+                      >
+                        {downloadingId === m.id ? (
+                          <>
+                            <Loader2 size={12} className="tr-spin" /> Baixando...
+                          </>
+                        ) : (
+                          <>
+                            <Download size={12} /> Baixar corte
+                          </>
+                        )}
                       </button>
                       <a
                         className="hs-btn-ghost"

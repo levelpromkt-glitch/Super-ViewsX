@@ -1,0 +1,13 @@
+{
+  "name": "video-clipper-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Downloads and cuts a YouTube video segment on demand (ffmpeg + yt-dlp). Deployed separately from the main app.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import type { TranscriptLine } from "./transcript/types";
 
 export type ViralMoment = {
@@ -24,7 +25,8 @@ export const ViralMomentsService = {
     });
 
     if (error) {
-      throw new ViralMomentsError(error.message || "Erro ao buscar os melhores momentos.", "FUNCTION_ERROR");
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao buscar os melhores momentos.");
+      throw new ViralMomentsError(message, "FUNCTION_ERROR");
     }
     if (!data?.success) {
       throw new ViralMomentsError(data?.message || "Erro ao analisar o vídeo.", data?.code || "UNKNOWN_ERROR");
