@@ -90,7 +90,11 @@ app.post("/clip", (req, res) => {
       console.error("yt-dlp failed", code, stderr.slice(-2000));
       cleanup(tmpDir);
       if (!res.headersSent) {
-        res.status(502).json({ error: "DOWNLOAD_FAILED", message: "Não foi possível baixar/cortar o vídeo." });
+        const isBotCheck = /sign in to confirm/i.test(stderr);
+        const message = isBotCheck
+          ? "O YouTube bloqueou temporariamente o download desse vídeo específico (proteção anti-bot). Tente novamente em alguns minutos ou baixe outro vídeo."
+          : "Não foi possível baixar/cortar o vídeo.";
+        res.status(502).json({ error: isBotCheck ? "YOUTUBE_BOT_CHECK" : "DOWNLOAD_FAILED", message });
       }
       return;
     }
