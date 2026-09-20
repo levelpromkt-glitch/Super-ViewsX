@@ -26,10 +26,9 @@ serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const userClient = createClient(supabaseUrl, anonKey);
+    const jwt = authHeader.replace(/^Bearer\s+/i, '');
+    const { data: { user }, error: userError } = await userClient.auth.getUser(jwt);
     if (userError || !user) {
       return new Response(
         JSON.stringify({ success: false, code: 'UNAUTHENTICATED', message: 'Sessão inválida.' }),
