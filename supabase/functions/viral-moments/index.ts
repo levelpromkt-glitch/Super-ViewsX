@@ -10,6 +10,14 @@ const ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_LINES = 1200; // safety cap on transcript size sent to the model
 const CACHE_TTL_HOURS = 24;
 
+// Allowed clip-duration presets (seconds). Anything else falls back to DEFAULT_DURATION.
+const DURATION_PRESETS: Record<string, [number, number]> = {
+  "30-60": [30, 60],
+  "60-120": [60, 120],
+  "120-180": [120, 180],
+};
+const DEFAULT_DURATION: [number, number] = [15, 90];
+
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -23,9 +31,9 @@ const generateCacheKey = async (text: string) => {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
-const getCache = async (videoId: string) => {
+const getCache = async (cacheSeed: string) => {
   try {
-    const cacheKey = await generateCacheKey(`viral-moments-v1-${videoId}`);
+    const cacheKey = await generateCacheKey(cacheSeed);
     const { data, error } = await supabase
       .from('api_search_cache')
       .select('response, created_at')
@@ -40,9 +48,9 @@ const getCache = async (videoId: string) => {
   }
 };
 
-const setCache = async (videoId: string, response: unknown) => {
+const setCache = async (cacheSeed: string, videoId: string, response: unknown) => {
   try {
-    const cacheKey = await generateCacheKey(`viral-moments-v1-${videoId}`);
+    const cacheKey = await generateCacheKey(cacheSeed);
     await supabase.from('api_search_cache').upsert({
       cache_key: cacheKey,
       platform: 'viral-moments',
@@ -57,29 +65,43 @@ const setCache = async (videoId: string, response: unknown) => {
   }
 };
 
-const buildPrompt = (title: string, lines: TranscriptLine[]) => {
+const buildPrompt = (
+  title: string,
+  lines: TranscriptLine[],
+  duration: [number, number],
+  viralHook: boolean
+) => {
   const transcriptText = lines
     .slice(0, MAX_LINES)
     .map((l) => `[${l.time}] ${l.text}`)
     .join("\n");
 
-  return `Você é um editor de vídeo especialista em cortes virais para Shorts, Reels e TikTok.
+  const [minSec, maxSec] = duration;
 
-Analise a transcrição abaixo do vídeo "${title || "sem título"}" e identifique de 4 a 8 trechos com o MAIOR potencial viral como vídeo curto (short-form).
+  const hookInstructions = viralHook
+    ? `
+GANCHO VIRAL (obrigatório): os primeiros 2-3 segundos de CADA trecho precisam funcionar como um gancho que impede a pessoa de dar scroll — uma pergunta intrigante, uma afirmação polêmica ou surpreendente, uma revelação parcial, ou o clímax/punchline adiantado. Se o melhor gancho para uma ideia não estiver exatamente no início do trecho mais óbvio, PRIORIZE ajustar o "start" para começar bem naquela frase de gancho (mesmo que troque um pouco o contexto), e preencha "hookReason" explicando qual é o gancho e por que ele prende atenção nos primeiros segundos.`
+    : "";
+
+  return `Você é um editor de vídeo especialista em cortes virais para Shorts, Reels e TikTok, focado em viralização RÁPIDA.
+
+Analise a transcrição abaixo do vídeo "${title || "sem título"}" e identifique de 4 a 8 trechos com o MAIOR potencial viral como vídeo curto (short-form). Priorize qualidade sobre quantidade, mas SEMPRE tente entregar pelo menos alguns trechos: se a ideia mais forte do vídeo for naturalmente mais curta ou mais longa que a faixa pedida, ADAPTE o corte (inclua um pouco de contexto antes/depois, ou aparare o excesso) para caber na faixa exigida sem perder o sentido, em vez de descartar a ideia inteira. Só deixe de retornar um trecho se genuinamente não houver NENHUM conteúdo com potencial viral no vídeo inteiro.
 
 Critérios para um bom trecho:
 - Início forte (gancho) que funciona sem contexto do resto do vídeo
 - Contém uma ideia completa: revelação, virada, piada, dado surpreendente, momento emocional ou polêmico
-- Duração entre 15 e 90 segundos
+- Duração ENTRE ${minSec} E ${maxSec} SEGUNDOS (obrigatório, não saia dessa faixa — ajuste o corte pra caber aqui)
 - Não corte no meio de uma frase ou ideia
+- Priorize o que tem maior chance de reter atenção nos primeiros 3 segundos e gerar compartilhamento rápido
+${hookInstructions}
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
 
 Responda APENAS com um JSON válido (sem markdown, sem texto antes ou depois), no formato:
-{"moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","reason":"Por que esse trecho tem potencial viral (1 frase)","score":87}]}
+{"moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","reason":"Por que esse trecho tem potencial viral (1 frase)","score":87${viralHook ? ',"hookReason":"O que faz os primeiros segundos prenderem atenção (1 frase)"' : ""}}]}
 
-"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição. "score" é de 0 a 100. Ordene por score decrescente.`;
+"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "score" é de 0 a 100, refletindo o potencial de viralização RÁPIDA. Ordene por score decrescente.`;
 };
 
 serve(async (req) => {
@@ -92,6 +114,9 @@ serve(async (req) => {
     const videoId: string = body?.videoId;
     const title: string = body?.title || "";
     const lines: TranscriptLine[] = Array.isArray(body?.lines) ? body.lines : [];
+    const durationKey: string = body?.duration;
+    const viralHook: boolean = body?.viralHook === true;
+    const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
 
     if (!videoId || typeof videoId !== 'string') {
       return new Response(
@@ -106,7 +131,9 @@ serve(async (req) => {
       );
     }
 
-    const cached = await getCache(videoId);
+    const cacheSeed = `viral-moments-v4-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
+
+    const cached = await getCache(cacheSeed);
     if (cached) {
       return new Response(
         JSON.stringify({ success: true, videoId, moments: cached.moments, meta: { ...cached.meta, cached: true } }),
@@ -123,7 +150,7 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    const prompt = buildPrompt(title, lines);
+    const prompt = buildPrompt(title, lines, duration, viralHook);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -178,18 +205,22 @@ serve(async (req) => {
       .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
       .map((m, i) => ({
         id: `m${i + 1}`,
-        start: Math.max(0, Math.floor(m.start)),
-        end: Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec)),
+        start: Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec))),
+        end: Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec))),
         title: String(m.title || 'Momento viral').slice(0, 120),
         reason: String(m.reason || '').slice(0, 300),
+        hookReason: viralHook ? String(m.hookReason || '').slice(0, 300) : undefined,
         score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
       }))
+      // AI-reported timestamps can exceed the transcript's real length; drop
+      // anything that becomes invalid (or trivially short) after clamping.
+      .filter((m) => m.end - m.start >= 5)
       .sort((a, b) => b.score - a.score);
 
     const executionTime = Date.now() - startTime;
     const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false };
 
-    await setCache(videoId, { moments, meta });
+    await setCache(cacheSeed, videoId, { moments, meta });
 
     return new Response(
       JSON.stringify({ success: true, videoId, moments, meta }),

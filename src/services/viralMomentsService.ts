@@ -2,12 +2,15 @@ import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import type { TranscriptLine } from "./transcript/types";
 
+export type DurationPreset = "30-60" | "60-120" | "120-180";
+
 export type ViralMoment = {
   id: string;
   start: number;
   end: number;
   title: string;
   reason: string;
+  hookReason?: string;
   score: number;
 };
 
@@ -19,9 +22,15 @@ export class ViralMomentsError extends Error {
 }
 
 export const ViralMomentsService = {
-  async findBestMoments(videoId: string, title: string, lines: TranscriptLine[]): Promise<ViralMoment[]> {
+  async findBestMoments(
+    videoId: string,
+    title: string,
+    lines: TranscriptLine[],
+    duration: DurationPreset,
+    viralHook: boolean
+  ): Promise<ViralMoment[]> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines },
+      body: { videoId, title, lines, duration, viralHook },
     });
 
     if (error) {

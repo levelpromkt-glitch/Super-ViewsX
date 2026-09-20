@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Anchor,
   ArrowRight,
   ArrowUpRight,
+  ChevronDown,
   Clock,
   Download,
   Flame,
@@ -18,8 +20,14 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 });
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
-import { ViralMomentsService, ViralMomentsError, ViralMoment } from "@/services/viralMomentsService";
+import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
+
+const DURATIONS: { id: DurationPreset; label: string }[] = [
+  { id: "30-60", label: "30s a 1 minuto" },
+  { id: "60-120", label: "1 a 2 minutos" },
+  { id: "120-180", label: "2 a 3 minutos" },
+];
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -63,6 +71,22 @@ function MelhoresMomentosPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  const [duration, setDuration] = useState<DurationPreset>("30-60");
+  const [durationOpen, setDurationOpen] = useState(false);
+  const [viralHook, setViralHook] = useState(false);
+  const durationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!durationOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (durationRef.current && !durationRef.current.contains(e.target as Node)) setDurationOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [durationOpen]);
+
+  const currentDurationLabel = DURATIONS.find((d) => d.id === duration)?.label ?? "";
+
   const handleAnalyze = async () => {
     const id = extractYouTubeId(url);
     if (!url.trim()) {
@@ -84,7 +108,7 @@ function MelhoresMomentosPage() {
     try {
       const transcript = await TranscriptService.getTranscript(id);
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const bestMoments = await ViralMomentsService.findBestMoments(id, "", transcript.lines);
+      const bestMoments = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration, viralHook);
       setMoments(bestMoments);
     } catch (error: any) {
       if (error instanceof TranscriptError) {
@@ -146,6 +170,39 @@ function MelhoresMomentosPage() {
             }}
             onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
           />
+          <div className="hs-period" ref={durationRef}>
+            <button
+              type="button"
+              className="hs-period-btn"
+              data-open={durationOpen}
+              onClick={() => setDurationOpen((o) => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={durationOpen}
+            >
+              {currentDurationLabel}
+              <ChevronDown size={14} className="hs-period-caret" />
+            </button>
+            {durationOpen && (
+              <div className="hs-period-menu" role="listbox">
+                {DURATIONS.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    role="option"
+                    aria-selected={duration === d.id}
+                    data-active={duration === d.id}
+                    className="hs-period-item"
+                    onClick={() => {
+                      setDuration(d.id);
+                      setDurationOpen(false);
+                    }}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="btn-primary tr-btn-main" onClick={handleAnalyze} disabled={loading}>
             {loading ? (
               <>
@@ -158,6 +215,19 @@ function MelhoresMomentosPage() {
             )}
           </button>
         </div>
+        <button
+          type="button"
+          className="hs-btn-ghost"
+          style={{
+            width: "fit-content",
+            borderColor: viralHook ? "var(--primary-lime)" : undefined,
+            color: viralHook ? "var(--primary-lime)" : undefined,
+          }}
+          onClick={() => setViralHook((v) => !v)}
+        >
+          <Anchor size={12} />
+          Gancho viral {viralHook ? "ativado" : "desativado"}
+        </button>
         {urlError && <div className="tr-error">{urlError}</div>}
         <p className="hs-disclaimer">
           Use esta ferramenta como fonte de inspiração. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
@@ -248,6 +318,13 @@ function MelhoresMomentosPage() {
                     <div className="hs-card-meta">
                       <span style={{ display: "block", lineHeight: 1.4 }}>{m.reason}</span>
                     </div>
+                    {m.hookReason && (
+                      <div className="hs-card-meta">
+                        <span style={{ display: "flex", gap: 4, lineHeight: 1.4, color: "var(--primary-lime)" }}>
+                          <Anchor size={12} style={{ flexShrink: 0, marginTop: 2 }} /> {m.hookReason}
+                        </span>
+                      </div>
+                    )}
                     <div className="hs-card-actions">
                       <button className="hs-btn-ghost" onClick={() => setActiveMoment(m)}>
                         <Play size={12} /> Assistir trecho
