@@ -11,14 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as PrivacidadeRouteImport } from './routes/privacidade'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
+import { Route as DashboardConfiguracoesRouteImport } from './routes/dashboard.configuracoes'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
 import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
 import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
+import { Route as DashboardConfiguracoesTiktokCallbackRouteImport } from './routes/dashboard.configuracoes.tiktok.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -30,6 +34,16 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacidadeRoute = PrivacidadeRouteImport.update({
+  id: '/privacidade',
+  path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardIndexRoute = DashboardIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -38,6 +52,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
 const DashboardAdminRoute = DashboardAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardConfiguracoesRoute = DashboardConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardHashtagRoute = DashboardHashtagRouteImport.update({
@@ -71,11 +90,20 @@ const DashboardTranscricaoRoute = DashboardTranscricaoRouteImport.update({
   path: '/transcricao',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardConfiguracoesTiktokCallbackRoute =
+  DashboardConfiguracoesTiktokCallbackRouteImport.update({
+    id: '/tiktok/callback',
+    path: '/tiktok/callback',
+    getParentRoute: () => DashboardConfiguracoesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -83,10 +111,14 @@ export interface FileRoutesByFullPath {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -94,12 +126,16 @@ export interface FileRoutesByTo {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -107,13 +143,17 @@ export interface FileRoutesById {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/privacidade'
+    | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/configuracoes'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -121,10 +161,14 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard/'
+    | '/dashboard/configuracoes/tiktok/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/privacidade'
+    | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/configuracoes'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -132,11 +176,15 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard'
+    | '/dashboard/configuracoes/tiktok/callback'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/privacidade'
+    | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/configuracoes'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -144,11 +192,14 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard/'
+    | '/dashboard/configuracoes/tiktok/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  PrivacidadeRoute: typeof PrivacidadeRoute
+  TermosRoute: typeof TermosRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -167,6 +218,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacidade': {
+      id: '/privacidade'
+      path: '/privacidade'
+      fullPath: '/privacidade'
+      preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard/': {
       id: '/dashboard/'
       path: '/'
@@ -179,6 +244,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/dashboard/admin'
       preLoaderRoute: typeof DashboardAdminRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/configuracoes': {
+      id: '/dashboard/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/dashboard/configuracoes'
+      preLoaderRoute: typeof DashboardConfiguracoesRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/hashtag': {
@@ -223,11 +295,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTranscricaoRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/configuracoes/tiktok/callback': {
+      id: '/dashboard/configuracoes/tiktok/callback'
+      path: '/tiktok/callback'
+      fullPath: '/dashboard/configuracoes/tiktok/callback'
+      preLoaderRoute: typeof DashboardConfiguracoesTiktokCallbackRouteImport
+      parentRoute: typeof DashboardConfiguracoesRoute
+    }
   }
 }
 
+interface DashboardConfiguracoesRouteChildren {
+  DashboardConfiguracoesTiktokCallbackRoute: typeof DashboardConfiguracoesTiktokCallbackRoute
+}
+
+const DashboardConfiguracoesRouteChildren: DashboardConfiguracoesRouteChildren =
+  {
+    DashboardConfiguracoesTiktokCallbackRoute:
+      DashboardConfiguracoesTiktokCallbackRoute,
+  }
+
+const DashboardConfiguracoesRouteWithChildren =
+  DashboardConfiguracoesRoute._addFileChildren(
+    DashboardConfiguracoesRouteChildren,
+  )
+
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
+  DashboardConfiguracoesRoute: typeof DashboardConfiguracoesRouteWithChildren
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
   DashboardPlanosRoute: typeof DashboardPlanosRoute
@@ -239,6 +334,7 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
+  DashboardConfiguracoesRoute: DashboardConfiguracoesRouteWithChildren,
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,
   DashboardPlanosRoute: DashboardPlanosRoute,
@@ -255,6 +351,8 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  PrivacidadeRoute: PrivacidadeRoute,
+  TermosRoute: TermosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

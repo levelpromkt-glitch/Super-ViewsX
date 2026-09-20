@@ -21,6 +21,7 @@ const titles: Record<string, string> = {
   "/dashboard/hashtag": "Pesquisar Hashtag",
   "/dashboard/top-players": "Top Players",
   "/dashboard/templates": "Templates",
+  "/dashboard/configuracoes": "Contas Conectadas",
   "/dashboard/admin": "Admin — Campanhas",
 };
 
