@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Camera, CheckCircle2, Link2, Loader2, LogOut } from "lucide-react";
 
@@ -81,6 +81,15 @@ function ConfiguracoesPage() {
   };
 
   const findConnected = (platform: SocialPlatform) => accounts?.find((a) => a.platform === platform) || null;
+
+  // This route has a nested child (the TikTok OAuth callback page). TanStack
+  // Router only renders that child through our own <Outlet/>, so on the
+  // callback sub-path we render just the child instead of stacking it under
+  // the settings UI below.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (pathname !== "/dashboard/configuracoes") {
+    return <Outlet />;
+  }
 
   return (
     <div className="hs-page">
