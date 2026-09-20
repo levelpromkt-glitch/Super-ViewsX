@@ -20,7 +20,7 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 });
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
-import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset } from "@/services/viralMomentsService";
+import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
@@ -28,6 +28,15 @@ const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "60-120", label: "1 a 2 minutos" },
   { id: "120-180", label: "2 a 3 minutos" },
 ];
+
+const PROFILE_LABELS: Record<NarrativeProfile, string> = {
+  fast_answer: "Resposta rápida",
+  contrarian: "Contraintuitivo",
+  money: "Dinheiro",
+  story: "História",
+  humor: "Humor",
+  transformation: "Transformação",
+};
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -309,6 +318,11 @@ function MelhoresMomentosPage() {
                   </div>
                   <div className="hs-card-body">
                     <h3 className="hs-card-title m-0">{m.title}</h3>
+                    {m.profile && (
+                      <span className="hs-card-tag" style={{ marginLeft: 0 }}>
+                        {PROFILE_LABELS[m.profile]}
+                      </span>
+                    )}
                     <div className="hs-card-row">
                       <span className="hs-card-views">
                         <Clock size={12} /> {formatTime(m.start)} – {formatTime(m.end)}

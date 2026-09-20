@@ -80,28 +80,66 @@ const buildPrompt = (
 
   const hookInstructions = viralHook
     ? `
-GANCHO VIRAL (obrigatório): os primeiros 2-3 segundos de CADA trecho precisam funcionar como um gancho que impede a pessoa de dar scroll — uma pergunta intrigante, uma afirmação polêmica ou surpreendente, uma revelação parcial, ou o clímax/punchline adiantado. Se o melhor gancho para uma ideia não estiver exatamente no início do trecho mais óbvio, PRIORIZE ajustar o "start" para começar bem naquela frase de gancho (mesmo que troque um pouco o contexto), e preencha "hookReason" explicando qual é o gancho e por que ele prende atenção nos primeiros segundos.`
+
+GANCHO VIRAL (modo adicional, obrigatório): os primeiros 2-3 segundos de CADA trecho aprovado precisam ser literalmente a frase do "trigger" (hook) abaixo — não uma introdução antes dela. Se o hook mais forte de uma ideia não estiver no início do recorte óbvio, mova o "start" pra começar exatamente nessa frase (mesmo perdendo um pouco de contexto), e preencha "hookReason" explicando por que ela prende atenção sem nenhum contexto anterior.`
     : "";
 
-  return `Você é um editor de vídeo especialista em cortes virais para Shorts, Reels e TikTok, focado em viralização RÁPIDA.
+  return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. Sua função não é "achar trechos legais" — é aplicar um teste de admissão rigoroso e devolver só o que passa.
 
-Analise a transcrição abaixo do vídeo "${title || "sem título"}" e identifique de 4 a 8 trechos com o MAIOR potencial viral como vídeo curto (short-form). Priorize qualidade sobre quantidade, mas SEMPRE tente entregar pelo menos alguns trechos: se a ideia mais forte do vídeo for naturalmente mais curta ou mais longa que a faixa pedida, ADAPTE o corte (inclua um pouco de contexto antes/depois, ou aparare o excesso) para caber na faixa exigida sem perder o sentido, em vez de descartar a ideia inteira. Só deixe de retornar um trecho se genuinamente não houver NENHUM conteúdo com potencial viral no vídeo inteiro.
+## O comportamento que o corte precisa vencer
 
-Critérios para um bom trecho:
-- Início forte (gancho) que funciona sem contexto do resto do vídeo
-- Contém uma ideia completa: revelação, virada, piada, dado surpreendente, momento emocional ou polêmico
-- Duração ENTRE ${minSec} E ${maxSec} SEGUNDOS (obrigatório, não saia dessa faixa — ajuste o corte pra caber aqui)
-- Não corte no meio de uma frase ou ideia
-- Priorize o que tem maior chance de reter atenção nos primeiros 3 segundos e gerar compartilhamento rápido
+No feed, ninguém escolheu esse vídeo. A alternativa é um deslize de menos de 1 segundo. Cada trecho precisa responder, nos primeiros segundos, a 4 perguntas silenciosas: o que está acontecendo? por que isso importa? o que vou ganhar continuando? está progredindo?
+
+## Teste de admissão: Hook / Desenvolvimento / Payoff
+
+Um trecho só é candidato se você conseguir responder as três perguntas usando o TEXTO literal da transcrição:
+
+- **Hook (trigger)**: que frase específica prende sem nenhum contexto anterior?
+- **Desenvolvimento**: o que sustenta entre o hook e o payoff — mecanismo, prova, virada, contra-argumento? Sem isso o momento é raso (vira observação, não candidato).
+- **Payoff**: o que fecha a promessa do hook?
+
+Se qualquer uma das três não existir explicitamente no texto, DESCARTE o trecho. Não invente desenvolvimento ou payoff que não estão na fala.
+
+## Dois portões (os dois têm que passar)
+
+**Editorial**: fiel ao que foi dito · compreensível sozinho · tem desenvolvimento real · tem payoff · termina em ponto de fechamento (resposta, consequência, regra, punchline, decisão) · não depende do resto do episódio para fazer sentido.
+
+**Feed**: orienta rápido (âncora clara logo no início: pessoa, número, conflito, pergunta, resultado, antes/depois ou contradição) · comunica a promessa/stakes cedo · entrega o primeiro valor antes do fim · cada parte soma algo novo (sem enrolação nem repetição sem ganho) · a dívida de contexto (coisas que o espectador precisa aceitar sem explicação) é pequena.
+
+## Reprovação automática — não aprove se:
+
+- o assunto central não dá pra entender sem ter visto o vídeo inteiro;
+- a frase inicial depende de algo dito antes ("isso", "ele", "como eu falei" sem referente no próprio trecho);
+- a promessa do hook não é paga dentro do trecho;
+- o final corta a resposta/resolução no meio;
+- é só uma opinião solta, sem razão, consequência ou tensão que a sustente;
+- usa suspense genérico ("isso vai mudar tudo") em vez de uma promessa específica;
+- número forte aparece sem escala ou comparação que dê sentido a ele.
+
+## Perfis narrativos — classifique cada trecho aprovado em um
+
+- \`fast_answer\`: resposta/resultado → motivo → demonstração → limite
+- \`contrarian\`: crença comum → quebra → mecanismo → prova
+- \`money\`: número/escala → comparação → mecanismo → consequência
+- \`story\`: stakes → contexto mínimo → obstáculo → virada → resolução
+- \`humor\`: setup mínimo → expectativa → ruptura → reação
+- \`transformation\`: antes/depois → ponto de mudança → processo → significado
+
+## Regras finais
+
+- Duração de cada trecho aprovado ENTRE ${minSec} E ${maxSec} SEGUNDOS. Ajuste o corte (context antes/depois, ou aparar excesso) pra caber na faixa sem perder o sentido, mas nunca inclua um trecho que só cabe na faixa cortando o desenvolvimento ou o payoff.
+- Não corte no meio de uma frase ou ideia.
+- Priorize qualidade sobre quantidade: é preferível devolver 1 trecho genuinamente aprovado do que 8 medianos. É válido devolver uma lista vazia se nada no vídeo passar nos dois portões.
+- Não force quantidade só para preencher uma cota.
 ${hookInstructions}
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
 
 Responda APENAS com um JSON válido (sem markdown, sem texto antes ou depois), no formato:
-{"moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","reason":"Por que esse trecho tem potencial viral (1 frase)","score":87${viralHook ? ',"hookReason":"O que faz os primeiros segundos prenderem atenção (1 frase)"' : ""}}]}
+{"moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87${viralHook ? ',"hookReason":"Por que a frase do gancho prende sem contexto anterior (1 frase)"' : ""}}]}
 
-"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "score" é de 0 a 100, refletindo o potencial de viralização RÁPIDA. Ordene por score decrescente.`;
+"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "score" é de 0 a 100 e reflete o quanto o trecho passou nos dois portões, não só o tema ser interessante. Ordene por score decrescente.`;
 };
 
 serve(async (req) => {
@@ -131,7 +169,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v4-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
+    const cacheSeed = `viral-moments-v5-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -202,6 +240,8 @@ serve(async (req) => {
 
     const videoDurationSec = lines.length > 0 ? lines[lines.length - 1].start + lines[lines.length - 1].duration : Infinity;
 
+    const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
+
     const moments = (parsed.moments || [])
       .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
       .map((m, i) => ({
@@ -209,6 +249,7 @@ serve(async (req) => {
         start: Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec))),
         end: Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec))),
         title: String(m.title || 'Momento viral').slice(0, 120),
+        profile: VALID_PROFILES.includes(m.profile) ? m.profile : undefined,
         reason: String(m.reason || '').slice(0, 300),
         hookReason: viralHook ? String(m.hookReason || '').slice(0, 300) : undefined,
         score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),

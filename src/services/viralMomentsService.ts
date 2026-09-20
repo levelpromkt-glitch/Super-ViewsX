@@ -4,11 +4,14 @@ import type { TranscriptLine } from "./transcript/types";
 
 export type DurationPreset = "30-60" | "60-120" | "120-180";
 
+export type NarrativeProfile = "fast_answer" | "contrarian" | "money" | "story" | "humor" | "transformation";
+
 export type ViralMoment = {
   id: string;
   start: number;
   end: number;
   title: string;
+  profile?: NarrativeProfile;
   reason: string;
   hookReason?: string;
   score: number;
