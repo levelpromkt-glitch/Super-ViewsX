@@ -59,10 +59,13 @@ app.post("/clip", (req, res) => {
   const outputTemplate = path.join(tmpDir, "clip.%(ext)s");
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
+  // No --force-keyframes-at-cuts: that forces a full ffmpeg re-encode of the
+  // clip, which reliably OOM-kills on Railway's free-tier memory limit. A
+  // plain stream copy just snaps to the nearest keyframe (video may start/end
+  // a couple seconds off) but needs a fraction of the memory.
   const args = [
     "--no-playlist",
     "--download-sections", `*${s}-${e}`,
-    "--force-keyframes-at-cuts",
     "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/best[height<=1080]",
     "--merge-output-format", "mp4",
     "-o", outputTemplate,
