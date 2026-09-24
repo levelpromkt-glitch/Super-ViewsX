@@ -69,8 +69,17 @@ app.post("/clip", (req, res) => {
     "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/best[height<=1080]",
     "--merge-output-format", "mp4",
     "-o", outputTemplate,
-    url,
   ];
+
+  // Requests from a logged-in YouTube account trigger the bot-check far less
+  // often than anonymous datacenter-IP requests. COOKIES_FILE is mounted as a
+  // volume (not baked into the image) so it can be refreshed without a rebuild.
+  const cookiesFile = process.env.COOKIES_FILE;
+  if (cookiesFile && fs.existsSync(cookiesFile)) {
+    args.push("--cookies", cookiesFile);
+  }
+
+  args.push(url);
 
   const child = spawn("yt-dlp", args, { timeout: PROCESS_TIMEOUT_MS });
   let stderr = "";
