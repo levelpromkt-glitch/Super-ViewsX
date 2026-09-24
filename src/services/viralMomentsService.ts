@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import type { TranscriptLine } from "./transcript/types";
 
-export type DurationPreset = "30-60" | "60-120" | "120-180";
+export type DurationPreset = "10-30" | "30-60" | "60-120" | "120-180";
 
 export type NarrativeProfile = "fast_answer" | "contrarian" | "money" | "story" | "humor" | "transformation";
 
@@ -24,6 +24,11 @@ export class ViralMomentsError extends Error {
   }
 }
 
+export type FindBestMomentsResult = {
+  moments: ViralMoment[];
+  videoTopic?: string;
+};
+
 export const ViralMomentsService = {
   async findBestMoments(
     videoId: string,
@@ -31,7 +36,7 @@ export const ViralMomentsService = {
     lines: TranscriptLine[],
     duration: DurationPreset,
     viralHook: boolean
-  ): Promise<ViralMoment[]> {
+  ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
       body: { videoId, title, lines, duration, viralHook },
     });
@@ -43,6 +48,6 @@ export const ViralMomentsService = {
     if (!data?.success) {
       throw new ViralMomentsError(data?.message || "Erro ao analisar o vídeo.", data?.code || "UNKNOWN_ERROR");
     }
-    return data.moments as ViralMoment[];
+    return { moments: data.moments as ViralMoment[], videoTopic: data.meta?.videoTopic };
   },
 };

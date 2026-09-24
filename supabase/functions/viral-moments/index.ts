@@ -12,11 +12,14 @@ const CACHE_TTL_HOURS = 24;
 
 // Allowed clip-duration presets (seconds). Anything else falls back to DEFAULT_DURATION.
 const DURATION_PRESETS: Record<string, [number, number]> = {
+  "10-30": [10, 30],
   "30-60": [30, 60],
   "60-120": [60, 120],
   "120-180": [120, 180],
 };
-const DEFAULT_DURATION: [number, number] = [15, 90];
+const DEFAULT_DURATION: [number, number] = [10, 90];
+// Hard floor regardless of preset: shorter than this isn't a usable clip anywhere.
+const MIN_CLIP_SECONDS = 10;
 
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
 
@@ -84,7 +87,11 @@ const buildPrompt = (
 GANCHO VIRAL (modo adicional, obrigatório): os primeiros 2-3 segundos de CADA trecho aprovado precisam ser literalmente a frase do "trigger" (hook) abaixo — não uma introdução antes dela. Se o hook mais forte de uma ideia não estiver no início do recorte óbvio, mova o "start" pra começar exatamente nessa frase (mesmo perdendo um pouco de contexto), e preencha "hookReason" explicando por que ela prende atenção sem nenhum contexto anterior.`
     : "";
 
-  return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. Sua função não é "achar trechos legais" — é aplicar um teste de admissão rigoroso e devolver só o que passa.
+  return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. O criador que vai receber esses cortes vive de volume: participa de competições de clipagem (minutagem mínima ${MIN_CLIP_SECONDS}s), posta em TikTok, Instagram e YouTube, e precisa do maior número possível de oportunidades genuinamente fortes desse vídeo — não só a melhor. Sua função não é "achar 1 trecho perfeito" — é vasculhar o vídeo inteiro e devolver TODOS os trechos que passem no teste de admissão abaixo.
+
+## Passo 0 — entenda o vídeo antes de procurar cortes
+
+Antes de listar qualquer trecho, identifique em 1-2 frases: qual é o assunto central do vídeo, o nicho/formato (ex: podcast de negócios, entrevista, aula, vlog, debate) e o que o público desse nicho especificamente valoriza (número e resultado concreto importam mais em conteúdo de dinheiro/negócios; revelação pessoal e virada de opinião importam mais em entrevista; contraste/punchline importa mais em humor). Use esse entendimento pra calibrar QUAIS trechos priorizar — o mesmo critério genérico de "tem hook" não filtra igual em nichos diferentes.
 
 ## O comportamento que o corte precisa vencer
 
@@ -127,17 +134,18 @@ Se qualquer uma das três não existir explicitamente no texto, DESCARTE o trech
 
 ## Regras finais
 
-- Duração de cada trecho aprovado ENTRE ${minSec} E ${maxSec} SEGUNDOS. Ajuste o corte (context antes/depois, ou aparar excesso) pra caber na faixa sem perder o sentido, mas nunca inclua um trecho que só cabe na faixa cortando o desenvolvimento ou o payoff.
+- Duração de cada trecho aprovado ENTRE ${minSec} E ${maxSec} SEGUNDOS (nunca abaixo de ${MIN_CLIP_SECONDS}s — é a minutagem mínima aceita nas competições de clipagem que esses cortes vão disputar). Ajuste o corte (contexto antes/depois, ou aparar excesso) pra caber na faixa sem perder o sentido, mas nunca inclua um trecho que só cabe na faixa cortando o desenvolvimento ou o payoff.
 - Não corte no meio de uma frase ou ideia.
-- Priorize qualidade sobre quantidade: é preferível devolver 1 trecho genuinamente aprovado do que 8 medianos. É válido devolver uma lista vazia se nada no vídeo passar nos dois portões.
-- Não force quantidade só para preencher uma cota.
+- MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15. Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
+- A única razão válida para descartar um candidato é ele genuinamente falhar no teste Hook/Desenvolvimento/Payoff, em um dos dois portões, ou em algum dos reprovadores automáticos acima — nunca descarte um trecho aprovado só porque já existem outros na lista.
+- Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
 ${hookInstructions}
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
 
 Responda APENAS com um JSON válido (sem markdown, sem texto antes ou depois), no formato:
-{"moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87${viralHook ? ',"hookReason":"Por que a frase do gancho prende sem contexto anterior (1 frase)"' : ""}}]}
+{"videoTopic":"1-2 frases sobre o assunto central e o nicho do vídeo (passo 0)","moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87${viralHook ? ',"hookReason":"Por que a frase do gancho prende sem contexto anterior (1 frase)"' : ""}}]}
 
 "start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "score" é de 0 a 100 e reflete o quanto o trecho passou nos dois portões, não só o tema ser interessante. Ordene por score decrescente.`;
 };
@@ -169,7 +177,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v5-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
+    const cacheSeed = `viral-moments-v6-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -199,7 +207,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
         thinking: { type: 'disabled' },
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -227,7 +235,7 @@ serve(async (req) => {
       );
     }
 
-    let parsed: { moments: any[] };
+    let parsed: { moments: any[]; videoTopic?: string };
     try {
       parsed = JSON.parse(jsonMatch[0]);
     } catch (e) {
@@ -255,12 +263,14 @@ serve(async (req) => {
         score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
       }))
       // AI-reported timestamps can exceed the transcript's real length; drop
-      // anything that becomes invalid (or trivially short) after clamping.
-      .filter((m) => m.end - m.start >= 5)
+      // anything that becomes invalid (or falls under the competition's
+      // minimum clip length) after clamping.
+      .filter((m) => m.end - m.start >= MIN_CLIP_SECONDS)
       .sort((a, b) => b.score - a.score);
 
     const executionTime = Date.now() - startTime;
-    const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false };
+    const videoTopic = typeof parsed.videoTopic === 'string' ? parsed.videoTopic.slice(0, 400) : undefined;
+    const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false, videoTopic };
 
     await setCache(cacheSeed, videoId, { moments, meta });
 

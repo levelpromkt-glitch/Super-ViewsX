@@ -27,6 +27,7 @@ import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadS
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
+  { id: "10-30", label: "10s a 30s (competição)" },
   { id: "30-60", label: "30s a 1 minuto" },
   { id: "60-120", label: "1 a 2 minutos" },
   { id: "120-180", label: "2 a 3 minutos" },
@@ -79,6 +80,7 @@ function MelhoresMomentosPage() {
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [moments, setMoments] = useState<ViralMoment[] | null>(null);
+  const [videoTopic, setVideoTopic] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -126,6 +128,7 @@ function MelhoresMomentosPage() {
     setUrlError(null);
     setVideoId(id);
     setMoments(null);
+    setVideoTopic(null);
     setActiveMoment(null);
     setLoading(true);
     setLoadingStatus("Transcrevendo o vídeo...");
@@ -133,8 +136,9 @@ function MelhoresMomentosPage() {
     try {
       const transcript = await TranscriptService.getTranscript(id);
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const bestMoments = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration, viralHook);
-      setMoments(bestMoments);
+      const result = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration, viralHook);
+      setMoments(result.moments);
+      setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
       if (error instanceof TranscriptError) {
         setUrlError(error.message);
@@ -363,10 +367,15 @@ function MelhoresMomentosPage() {
       {/* Results */}
       {!loading && moments && (
         <>
-          <div className="hs-summary">
+          <div className="hs-summary" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
             <span>
               <strong>{moments.length}</strong> {moments.length === 1 ? "momento encontrado" : "momentos encontrados"} · ordenados por potencial viral
             </span>
+            {videoTopic && (
+              <span style={{ fontSize: ".78rem", color: "var(--text-secondary)" }}>
+                Sobre o vídeo: {videoTopic}
+              </span>
+            )}
           </div>
           {downloadError && <div className="tr-error">{downloadError}</div>}
 
