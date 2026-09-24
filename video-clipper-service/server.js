@@ -13,6 +13,23 @@ const API_KEY = process.env.CLIP_SERVICE_API_KEY;
 const MAX_CLIP_SECONDS = 180;
 const PROCESS_TIMEOUT_MS = 120000;
 
+// Comma-separated "host:port" pool (e.g. Webshare's free datacenter proxies).
+// Routing yt-dlp through one of these instead of hitting YouTube directly
+// from the VM keeps the VM's own IP out of it, so it can't get flagged.
+const PROXY_LIST = (process.env.PROXY_LIST || "")
+  .split(",")
+  .map((p) => p.trim())
+  .filter(Boolean);
+const PROXY_USER = process.env.PROXY_USER;
+const PROXY_PASS = process.env.PROXY_PASS;
+
+function pickProxyUrl() {
+  if (PROXY_LIST.length === 0) return null;
+  const hostPort = PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
+  const auth = PROXY_USER && PROXY_PASS ? `${PROXY_USER}:${PROXY_PASS}@` : "";
+  return `http://${auth}${hostPort}/`;
+}
+
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Content-Type, x-api-key");
@@ -77,6 +94,12 @@ app.post("/clip", (req, res) => {
   const cookiesFile = process.env.COOKIES_FILE;
   if (cookiesFile && fs.existsSync(cookiesFile)) {
     args.push("--cookies", cookiesFile);
+  }
+
+  const proxyUrl = pickProxyUrl();
+  if (proxyUrl) {
+    console.log("using proxy", proxyUrl.replace(/:[^:@]+@/, ":***@"));
+    args.push("--proxy", proxyUrl);
   }
 
   args.push(url);
