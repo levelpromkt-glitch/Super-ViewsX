@@ -32,6 +32,14 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // schema-valid output — a long video producing many moments used to
 // occasionally break the old approach with a stray unescaped quote or a
 // response cut off mid-JSON; that whole class of failure is gone now.
+// Flat schema on purpose: a moments array whose items each contained their
+// own titles array (array-of-objects-with-an-array) turned out to make the
+// model occasionally escape-stringify parts of its own output for large
+// responses (a real long video easily produces 15+ moments) — confirmed via
+// live testing, where "moments" sometimes came back as a JSON string, and
+// once even wrapping the *entire* {videoTopic, moments} payload inside it.
+// Three flat title fields instead of a titles[] removes the extra nesting
+// level and, empirically, the escaping behavior along with it.
 const MOMENTS_TOOL = {
   name: "return_moments",
   description: "Retorna os melhores momentos identificados no vídeo.",
@@ -49,13 +57,9 @@ const MOMENTS_TOOL = {
           properties: {
             start: { type: "integer", description: "Início do trecho em segundos." },
             end: { type: "integer", description: "Fim do trecho em segundos." },
-            titles: {
-              type: "array",
-              items: { type: "string" },
-              minItems: 3,
-              maxItems: 3,
-              description: "Exatamente 3 variações de headline, cada uma com um ângulo diferente do mesmo trecho.",
-            },
+            title1: { type: "string", description: "Headline, ângulo 1 (ex: a pergunta que o trecho responde)." },
+            title2: { type: "string", description: "Headline, ângulo 2, diferente do 1 (ex: a afirmação polêmica)." },
+            title3: { type: "string", description: "Headline, ângulo 3, diferente dos anteriores (ex: o número/resultado chocante)." },
             profile: {
               type: "string",
               enum: ["fast_answer", "contrarian", "money", "story", "humor", "transformation"],
@@ -74,7 +78,7 @@ const MOMENTS_TOOL = {
               description: "Por que a frase de hookStart prende sem contexto anterior. Só incluir junto com hookStart.",
             },
           },
-          required: ["start", "end", "titles", "profile", "reason", "score"],
+          required: ["start", "end", "title1", "title2", "title3", "profile", "reason", "score"],
         },
       },
     },
@@ -240,7 +244,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v9-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v10-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -270,7 +274,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 8000,
+        max_tokens: 16000,
         thinking: { type: 'disabled' },
         tools: [MOMENTS_TOOL],
         tool_choice: { type: 'tool', name: 'return_moments' },
@@ -289,24 +293,39 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
     const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
-    const parsed = toolBlock?.input as { moments?: any; videoTopic?: string } | undefined;
+    const rawInput = toolBlock?.input as any;
 
-    // The model occasionally serializes the "moments" array as a JSON string
-    // instead of a native nested array, despite the schema — normalize both
-    // shapes rather than rejecting a structurally-valid response outright.
+    // Empirically, large responses (a long video easily produces 15+
+    // moments) sometimes get escape-stringified by the model at some level
+    // instead of coming back as native nested structures — sometimes just
+    // "moments", sometimes the model wraps the *entire* {videoTopic, moments}
+    // payload inside the "moments" string. Recurse through both cases rather
+    // than rejecting an otherwise-salvageable response.
+    let videoTopicOut: string | undefined;
     let momentsList: any[] | undefined;
-    if (Array.isArray(parsed?.moments)) {
-      momentsList = parsed!.moments;
-    } else if (typeof parsed?.moments === 'string') {
-      try {
-        const asJson = JSON.parse(parsed.moments);
-        if (Array.isArray(asJson)) momentsList = asJson;
-      } catch {
-        // fall through to the error response below
+    const tryExtract = (obj: any) => {
+      if (!obj || momentsList) return;
+      if (Array.isArray(obj.moments)) {
+        momentsList = obj.moments;
+        if (typeof obj.videoTopic === 'string') videoTopicOut = obj.videoTopic;
+      } else if (typeof obj.moments === 'string') {
+        try {
+          const asJson = JSON.parse(obj.moments);
+          if (Array.isArray(asJson)) {
+            momentsList = asJson;
+            if (typeof obj.videoTopic === 'string') videoTopicOut = obj.videoTopic;
+          } else if (asJson && typeof asJson === 'object') {
+            tryExtract(asJson);
+          }
+        } catch {
+          // fall through to the error response below
+        }
       }
-    }
+    };
+    tryExtract(rawInput);
+    if (!videoTopicOut && typeof rawInput?.videoTopic === 'string') videoTopicOut = rawInput.videoTopic;
 
-    if (!parsed || !momentsList) {
+    if (!momentsList) {
       console.error('No usable moments array in AI response', JSON.stringify(aiData).slice(0, 2000));
       return new Response(
         JSON.stringify({ success: false, code: 'AI_PARSE_ERROR', message: 'Não foi possível interpretar a resposta da IA.' }),
@@ -323,10 +342,9 @@ serve(async (req) => {
       .map((m, i) => {
         const start = Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec)));
         const end = Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec)));
-        const titles = (Array.isArray(m.titles) ? m.titles : [m.title])
+        const titles = [m.title1, m.title2, m.title3, m.title]
           .filter((t: unknown) => typeof t === 'string' && t.trim())
-          .map((t: string) => t.slice(0, 80))
-          .slice(0, 4);
+          .map((t: string) => t.slice(0, 80));
         if (titles.length === 0) titles.push('Momento viral');
 
         // hookStart is an alternate, more aggressive opening within the same
@@ -357,7 +375,7 @@ serve(async (req) => {
       .sort((a, b) => b.score - a.score);
 
     const executionTime = Date.now() - startTime;
-    const videoTopic = typeof parsed.videoTopic === 'string' ? parsed.videoTopic.slice(0, 400) : undefined;
+    const videoTopic = typeof videoTopicOut === 'string' ? videoTopicOut.slice(0, 400) : undefined;
     const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false, videoTopic };
 
     await setCache(cacheSeed, videoId, { moments, meta });
