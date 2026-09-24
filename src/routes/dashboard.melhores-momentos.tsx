@@ -23,6 +23,7 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 });
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
+import type { TranscriptLine } from "@/services/transcript/types";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
@@ -74,6 +75,43 @@ function formatDuration(sec: number) {
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
+// Parses a pasted transcript where a timestamp sits alone on its own line
+// (mm:ss or hh:mm:ss) followed by one or more lines of text, e.g. the format
+// youtubetotranscript.com and similar tools export with "Timestamp ON".
+// Lets the user skip the Deepgram call entirely when they already have this.
+function parsePastedTranscript(raw: string): TranscriptLine[] {
+  const TS_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+  const rawLines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  type Entry = { seconds: number; text: string[] };
+  const entries: Entry[] = [];
+  let current: Entry | null = null;
+
+  for (const line of rawLines) {
+    const match = line.match(TS_RE);
+    if (match) {
+      const seconds = match[3] !== undefined
+        ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+        : Number(match[1]) * 60 + Number(match[2]);
+      current = { seconds, text: [] };
+      entries.push(current);
+    } else if (current) {
+      current.text.push(line);
+    }
+  }
+
+  return entries
+    .map((entry, i) => {
+      const start = entry.seconds;
+      const nextStart = entries[i + 1]?.seconds ?? start + 3;
+      const duration = Math.max(1, nextStart - start);
+      const mm = String(Math.floor(start / 60)).padStart(2, "0");
+      const ss = String(start % 60).padStart(2, "0");
+      return { time: `${mm}:${ss}`, seconds: start, text: entry.text.join(" ").trim(), start, duration };
+    })
+    .filter((l) => l.text.length > 0);
+}
+
 function slugifyFilename(text: string) {
   const slug = text
     .normalize("NFD")
@@ -92,6 +130,7 @@ function MelhoresMomentosPage() {
   const [url, setUrl] = useState("");
   const [videoId, setVideoId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [pastedTranscript, setPastedTranscript] = useState("");
   const [storagePath, setStoragePath] = useState<string | null>(null);
   const uploadObjectUrl = useMemo(() => (uploadFile ? URL.createObjectURL(uploadFile) : null), [uploadFile]);
   useEffect(() => {
@@ -206,10 +245,19 @@ function MelhoresMomentosPage() {
     try {
       const path = await PostsService.uploadVideo(uploadFile);
       setStoragePath(path);
-      setLoadingStatus("Transcrevendo o áudio do vídeo...");
-      const transcript = await ViralMomentsService.transcribeUpload(path);
+
+      const manualLines = parsePastedTranscript(pastedTranscript);
+      let lines: TranscriptLine[];
+      if (manualLines.length > 0) {
+        lines = manualLines;
+      } else {
+        setLoadingStatus("Transcrevendo o áudio do vídeo...");
+        const transcript = await ViralMomentsService.transcribeUpload(path);
+        lines = transcript.lines;
+      }
+
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(path, "", transcript.lines, duration);
+      const result = await ViralMomentsService.findBestMoments(path, "", lines, duration);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
@@ -302,7 +350,7 @@ function MelhoresMomentosPage() {
               borderColor: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
               color: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
             }}
-            onClick={() => { setSourceMode("youtube"); setUrlError(null); }}
+            onClick={() => { setSourceMode("youtube"); setUrlError(null); setUploadFile(null); setPastedTranscript(""); }}
           >
             <Link2 size={12} /> Colar link
           </button>
@@ -314,7 +362,7 @@ function MelhoresMomentosPage() {
               borderColor: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
               color: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
             }}
-            onClick={() => { setSourceMode("upload"); setUrlError(null); }}
+            onClick={() => { setSourceMode("upload"); setUrlError(null); setUrl(""); }}
           >
             <Upload size={12} /> Enviar vídeo
           </button>
@@ -389,6 +437,23 @@ function MelhoresMomentosPage() {
             )}
           </button>
         </div>
+        {sourceMode === "upload" && (
+          <div className="tr-field">
+            <label className="hs-label">Já tem a transcrição com timestamp? (opcional)</label>
+            <textarea
+              className="tr-input"
+              style={{ width: "100%", minHeight: 90, resize: "vertical", fontFamily: "inherit", fontSize: ".8rem" }}
+              placeholder={"Cole aqui no formato:\n00:00\ntexto da fala\n00:03\ntexto da fala..."}
+              value={pastedTranscript}
+              onChange={(e) => setPastedTranscript(e.target.value)}
+            />
+            <span style={{ fontSize: ".75rem", color: "var(--text-muted)" }}>
+              {pastedTranscript.trim()
+                ? "Vamos usar essa transcrição e pular a transcrição automática."
+                : "Deixe em branco para transcrever automaticamente."}
+            </span>
+          </div>
+        )}
         {urlError && <div className="tr-error">{urlError}</div>}
         <p className="hs-disclaimer">
           Use esta ferramenta como fonte de inspiração. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
