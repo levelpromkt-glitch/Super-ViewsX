@@ -240,7 +240,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v8-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v9-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -289,10 +289,25 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
     const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
-    const parsed = toolBlock?.input as { moments?: any[]; videoTopic?: string } | undefined;
+    const parsed = toolBlock?.input as { moments?: any; videoTopic?: string } | undefined;
 
-    if (!parsed || !Array.isArray(parsed.moments)) {
-      console.error('No tool_use block in AI response', JSON.stringify(aiData).slice(0, 2000));
+    // The model occasionally serializes the "moments" array as a JSON string
+    // instead of a native nested array, despite the schema — normalize both
+    // shapes rather than rejecting a structurally-valid response outright.
+    let momentsList: any[] | undefined;
+    if (Array.isArray(parsed?.moments)) {
+      momentsList = parsed!.moments;
+    } else if (typeof parsed?.moments === 'string') {
+      try {
+        const asJson = JSON.parse(parsed.moments);
+        if (Array.isArray(asJson)) momentsList = asJson;
+      } catch {
+        // fall through to the error response below
+      }
+    }
+
+    if (!parsed || !momentsList) {
+      console.error('No usable moments array in AI response', JSON.stringify(aiData).slice(0, 2000));
       return new Response(
         JSON.stringify({ success: false, code: 'AI_PARSE_ERROR', message: 'Não foi possível interpretar a resposta da IA.' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -303,7 +318,7 @@ serve(async (req) => {
 
     const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
 
-    const moments = (parsed.moments || [])
+    const moments = momentsList
       .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
       .map((m, i) => {
         const start = Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec)));
