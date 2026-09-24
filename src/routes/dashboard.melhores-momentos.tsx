@@ -27,7 +27,7 @@ import type { TranscriptLine } from "@/services/transcript/types";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
-import { PostsService, PostsError } from "@/services/postsService";
+import { PostsService, PostsError, MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -243,7 +243,7 @@ function MelhoresMomentosPage() {
     setLoadingStatus("Enviando vídeo...");
 
     try {
-      const path = await PostsService.uploadVideo(uploadFile);
+      const path = await PostsService.uploadVideo(uploadFile, MAX_SOURCE_VIDEO_BYTES);
       setStoragePath(path);
 
       const manualLines = parsePastedTranscript(pastedTranscript);
@@ -381,16 +381,21 @@ function MelhoresMomentosPage() {
               onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
             />
           ) : (
-            <input
-              className="tr-input"
-              type="file"
-              accept="video/*"
-              onChange={(e) => {
-                setUploadFile(e.target.files?.[0] || null);
-                if (urlError) setUrlError(null);
-              }}
-              style={{ padding: 10 }}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+              <input
+                className="tr-input"
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  setUploadFile(e.target.files?.[0] || null);
+                  if (urlError) setUrlError(null);
+                }}
+                style={{ padding: 10 }}
+              />
+              <span style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>
+                Até {Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — dá pra subir um episódio inteiro.
+              </span>
+            </div>
           )}
           <div className="hs-period" ref={durationRef}>
             <button

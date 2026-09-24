@@ -23,12 +23,16 @@ export class PostsError extends Error {
   }
 }
 
-const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200MB
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200MB — final clips meant for publishing.
+// Source videos analyzed for Melhores Momentos can be a full podcast/episode,
+// so they get a much higher ceiling (matches the post-videos bucket's own limit).
+export const MAX_SOURCE_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
 
 export const PostsService = {
-  async uploadVideo(file: File): Promise<string> {
-    if (file.size > MAX_UPLOAD_BYTES) {
-      throw new PostsError("O vídeo excede o limite de 200MB.", "FILE_TOO_LARGE");
+  async uploadVideo(file: File, maxBytes: number = MAX_UPLOAD_BYTES): Promise<string> {
+    if (file.size > maxBytes) {
+      const maxMb = Math.round(maxBytes / (1024 * 1024));
+      throw new PostsError(`O vídeo excede o limite de ${maxMb}MB.`, "FILE_TOO_LARGE");
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
