@@ -12,7 +12,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { videoId, start, end } = body || {};
+    const { videoId, start, end, vertical } = body || {};
 
     if (typeof videoId !== 'string' || typeof start !== 'number' || typeof end !== 'number') {
       return new Response(
@@ -37,7 +37,7 @@ serve(async (req) => {
         'content-type': 'application/json',
         ...(serviceApiKey ? { 'x-api-key': serviceApiKey } : {}),
       },
-      body: JSON.stringify({ videoId, start, end }),
+      body: JSON.stringify({ videoId, start, end, vertical: vertical === true }),
     });
 
     if (!clipResponse.ok) {

@@ -8,7 +8,7 @@ export class ClipDownloadError extends Error {
 }
 
 export const ClipDownloadService = {
-  async downloadClip(videoId: string, start: number, end: number, filename: string): Promise<void> {
+  async downloadClip(videoId: string, start: number, end: number, filename: string, vertical = false): Promise<void> {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -26,7 +26,7 @@ export const ClipDownloadService = {
         "apikey": anonKey,
         "authorization": `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ videoId, start, end }),
+      body: JSON.stringify({ videoId, start, end, vertical }),
     });
 
     const contentType = response.headers.get("content-type") || "";

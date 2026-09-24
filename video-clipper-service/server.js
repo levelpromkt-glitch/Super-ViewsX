@@ -53,7 +53,7 @@ app.post("/clip", (req, res) => {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
 
-  const { videoId, start, end } = req.body || {};
+  const { videoId, start, end, vertical } = req.body || {};
 
   if (!isValidVideoId(videoId)) {
     return res.status(400).json({ error: "INVALID_VIDEO_ID" });
@@ -152,14 +152,43 @@ app.post("/clip", (req, res) => {
     }
 
     const filePath = path.join(tmpDir, files[0]);
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="clip-${videoId}-${s}-${e}.mp4"`);
 
-    const stream = fs.createReadStream(filePath);
-    stream.pipe(res);
-    stream.on("close", () => cleanup(tmpDir));
-    stream.on("error", () => cleanup(tmpDir));
+    if (!vertical) {
+      streamFile(res, filePath, tmpDir, `clip-${videoId}-${s}-${e}.mp4`);
+      return;
+    }
+
+    const verticalPath = path.join(tmpDir, "vertical.mp4");
+    const py = spawn("python3", ["vertical_crop.py", filePath, verticalPath], {
+      timeout: PROCESS_TIMEOUT_MS,
+    });
+    let pyStderr = "";
+    py.stderr.on("data", (d) => { pyStderr += d.toString(); });
+    py.on("error", (err) => {
+      cleanup(tmpDir);
+      if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
+    });
+    py.on("close", (pyCode) => {
+      if (pyCode !== 0 || !fs.existsSync(verticalPath)) {
+        console.error("vertical_crop failed", pyCode, pyStderr.slice(-2000));
+        cleanup(tmpDir);
+        if (!res.headersSent) {
+          res.status(502).json({ error: "VERTICAL_FAILED", message: "Não foi possível gerar a versão vertical." });
+        }
+        return;
+      }
+      streamFile(res, verticalPath, tmpDir, `clip-vertical-${videoId}-${s}-${e}.mp4`);
+    });
   });
 });
+
+function streamFile(res, filePath, tmpDir, filename) {
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  const stream = fs.createReadStream(filePath);
+  stream.pipe(res);
+  stream.on("close", () => cleanup(tmpDir));
+  stream.on("error", () => cleanup(tmpDir));
+}
 
 app.listen(PORT, () => console.log(`Clip service listening on port ${PORT}`));

@@ -174,14 +174,15 @@ function MelhoresMomentosPage() {
     }
   };
 
-  const handleDownload = async (m: ViralMoment) => {
+  const handleDownload = async (m: ViralMoment, vertical = false) => {
     if (!videoId) return;
     setDownloadError(null);
-    setDownloadingId(m.id);
+    setDownloadingId(vertical ? `${m.id}-vertical` : m.id);
     try {
       const start = getEffectiveStart(m);
-      const filename = `${slugifyFilename(getEffectiveTitle(m))}.mp4`;
-      await ClipDownloadService.downloadClip(videoId, start, m.end, filename);
+      const suffix = vertical ? "-vertical" : "";
+      const filename = `${slugifyFilename(getEffectiveTitle(m))}${suffix}.mp4`;
+      await ClipDownloadService.downloadClip(videoId, start, m.end, filename, vertical);
     } catch (error: any) {
       setDownloadError(
         error instanceof ClipDownloadError ? error.message : "Erro inesperado ao baixar o corte."
@@ -492,6 +493,22 @@ function MelhoresMomentosPage() {
                         ) : (
                           <>
                             <Download size={12} /> Baixar corte
+                          </>
+                        )}
+                      </button>
+                      <button
+                        className="hs-btn-ghost"
+                        onClick={() => handleDownload(m, true)}
+                        disabled={downloadingId === `${m.id}-vertical`}
+                        title="Recorte 9:16 centrado no rosto de quem está falando"
+                      >
+                        {downloadingId === `${m.id}-vertical` ? (
+                          <>
+                            <Loader2 size={12} className="tr-spin" /> Gerando vertical...
+                          </>
+                        ) : (
+                          <>
+                            <Download size={12} /> Baixar vertical
                           </>
                         )}
                       </button>
