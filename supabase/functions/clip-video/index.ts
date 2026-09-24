@@ -125,13 +125,23 @@ serve(async (req) => {
       );
     }
 
-    return new Response(clipResponse.body, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': clipResponse.headers.get('content-type') || 'video/mp4',
-        'Content-Disposition': clipResponse.headers.get('content-disposition') || 'attachment; filename="clip.mp4"',
-      },
-    });
+    // The VM uploads the finished clip straight to R2 and hands back a signed
+    // URL instead of the file bytes — we just relay that small JSON payload,
+    // so the browser can download the clip directly from R2 afterwards
+    // instead of relaying the whole file through this function.
+    const clipResult = await clipResponse.json().catch(() => null);
+    if (!clipResult?.downloadUrl) {
+      console.error('clip-service returned no downloadUrl', clipResult);
+      return new Response(
+        JSON.stringify({ success: false, code: 'CLIP_SERVICE_ERROR', message: clipResult?.message || 'Não foi possível gerar o corte do vídeo.' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, downloadUrl: clipResult.downloadUrl, filename: clipResult.filename }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error: any) {
     console.error('clip-video failed', error);
     return new Response(

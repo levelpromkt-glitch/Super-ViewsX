@@ -24,7 +24,7 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
 import type { TranscriptLine } from "@/services/transcript/types";
-import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
+import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile, AudioSignal } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
@@ -80,7 +80,7 @@ function formatDuration(sec: number) {
 // youtubetotranscript.com and similar tools export with "Timestamp ON".
 // Lets the user skip the Deepgram call entirely when they already have this.
 function parsePastedTranscript(raw: string): TranscriptLine[] {
-  const TS_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+  const TS_RE = /^\[?(\d{1,2}):(\d{2})(?::(\d{2}))?\]?$/;
   const rawLines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
 
   type Entry = { seconds: number; text: string[] };
@@ -123,6 +123,48 @@ function slugifyFilename(text: string) {
   return slug || "corte";
 }
 
+// Grabs one frame per moment directly from the uploaded video file (client-side,
+// via a hidden <video>+<canvas>) so upload-mode cards get a real thumbnail
+// instead of the blank placeholder — YouTube mode already has one via
+// img.youtube.com. Seeks are sequential because a single <video> element can
+// only be at one currentTime at a time.
+async function generateMomentThumbnails(
+  momentsList: ViralMoment[],
+  videoUrl: string
+): Promise<Record<string, string>> {
+  const video = document.createElement("video");
+  video.src = videoUrl;
+  video.muted = true;
+  video.playsInline = true;
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("Falha ao carregar o vídeo para gerar capas."));
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = Math.round(320 * ((video.videoHeight || 9) / (video.videoWidth || 16)));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return {};
+
+  const thumbnails: Record<string, string> = {};
+  for (const m of momentsList) {
+    const seekTime = Math.min(m.start, Math.max(0, video.duration - 0.1));
+    await new Promise<void>((resolve) => {
+      const onSeeked = () => {
+        video.removeEventListener("seeked", onSeeked);
+        resolve();
+      };
+      video.addEventListener("seeked", onSeeked);
+      video.currentTime = seekTime;
+    });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    thumbnails[m.id] = canvas.toDataURL("image/jpeg", 0.7);
+  }
+  return thumbnails;
+}
+
 type SourceMode = "youtube" | "upload";
 
 function MelhoresMomentosPage() {
@@ -145,6 +187,8 @@ function MelhoresMomentosPage() {
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [momentThumbnails, setMomentThumbnails] = useState<Record<string, string>>({});
 
   const [duration, setDuration] = useState<DurationPreset>("30-60");
   const [durationOpen, setDurationOpen] = useState(false);
@@ -243,6 +287,7 @@ function MelhoresMomentosPage() {
     setActiveMoment(null);
     setSelectedTitle({});
     setUseHook({});
+    setMomentThumbnails({});
     setLoading(true);
     setLoadingStatus("Enviando vídeo...");
 
@@ -252,6 +297,7 @@ function MelhoresMomentosPage() {
 
       const manualLines = parsePastedTranscript(pastedTranscript);
       let lines: TranscriptLine[];
+      let audioSignals: AudioSignal[] | undefined;
       if (manualLines.length > 0) {
         lines = manualLines;
       } else {
@@ -266,12 +312,19 @@ function MelhoresMomentosPage() {
           );
         });
         lines = transcript.lines;
+        audioSignals = transcript.audioSignals;
       }
 
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(key, "", lines, duration);
+      const result = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
+
+      const videoUrl = URL.createObjectURL(uploadFile);
+      generateMomentThumbnails(result.moments, videoUrl)
+        .then(setMomentThumbnails)
+        .catch((e) => console.error("Falha ao gerar capas dos cortes", e))
+        .finally(() => URL.revokeObjectURL(videoUrl));
     } catch (error: any) {
       if (error instanceof ViralMomentsError) {
         setUrlError(error.message);
@@ -291,19 +344,28 @@ function MelhoresMomentosPage() {
 
   const handleDownload = async (m: ViralMoment, vertical = false) => {
     if (!clipSource) return;
+    const downloadId = vertical ? `${m.id}-vertical` : m.id;
     setDownloadError(null);
-    setDownloadingId(vertical ? `${m.id}-vertical` : m.id);
+    setDownloadingId(downloadId);
+    setDownloadProgress((prev) => ({ ...prev, [downloadId]: 0 }));
     try {
       const start = getEffectiveStart(m);
       const suffix = vertical ? "-vertical" : "";
       const filename = `${slugifyFilename(getEffectiveTitle(m))}${suffix}.mp4`;
-      await ClipDownloadService.downloadClip(clipSource, start, m.end, filename, vertical);
+      await ClipDownloadService.downloadClip(clipSource, start, m.end, filename, vertical, (percent) => {
+        setDownloadProgress((prev) => ({ ...prev, [downloadId]: percent }));
+      });
     } catch (error: any) {
       setDownloadError(
         error instanceof ClipDownloadError ? error.message : "Erro inesperado ao baixar o corte."
       );
     } finally {
       setDownloadingId(null);
+      setDownloadProgress((prev) => {
+        const next = { ...prev };
+        delete next[downloadId];
+        return next;
+      });
     }
   };
 
@@ -455,6 +517,29 @@ function MelhoresMomentosPage() {
         {sourceMode === "upload" && (
           <div className="tr-field">
             <label className="hs-label">Já tem a transcrição com timestamp? (opcional)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <input
+                type="file"
+                accept=".txt,text/plain"
+                id="transcript-txt-input"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const text = await file.text();
+                  setPastedTranscript(text);
+                  e.target.value = "";
+                }}
+              />
+              <label htmlFor="transcript-txt-input" className="hs-btn-ghost" style={{ flex: "none", cursor: "pointer" }}>
+                <Upload size={12} /> Anexar arquivo .txt
+              </label>
+              {pastedTranscript.trim() && (
+                <button type="button" className="hs-btn-ghost" style={{ flex: "none" }} onClick={() => setPastedTranscript("")}>
+                  <X size={12} /> Limpar
+                </button>
+              )}
+            </div>
             <textarea
               className="tr-input"
               style={{ width: "100%", minHeight: 90, resize: "vertical", fontFamily: "inherit", fontSize: ".8rem" }}
@@ -607,6 +692,13 @@ function MelhoresMomentosPage() {
                         style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, objectFit: "cover", zIndex: 0 }}
                       />
                     )}
+                    {!videoId && momentThumbnails[m.id] && (
+                      <img
+                        src={momentThumbnails[m.id]}
+                        alt=""
+                        style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, objectFit: "cover", zIndex: 0 }}
+                      />
+                    )}
                     <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 1 }}></div>
                     <Play size={26} className="hs-thumb-play" style={{ position: "relative", zIndex: 2 }} />
                     <span className="hs-thumb-speed" style={{ position: "relative", zIndex: 2 }}>
@@ -680,7 +772,7 @@ function MelhoresMomentosPage() {
                       >
                         {downloadingId === m.id ? (
                           <>
-                            <Loader2 size={12} className="tr-spin" /> Baixando...
+                            <Loader2 size={12} className="tr-spin" /> Baixando... {downloadProgress[m.id] ?? 0}%
                           </>
                         ) : (
                           <>

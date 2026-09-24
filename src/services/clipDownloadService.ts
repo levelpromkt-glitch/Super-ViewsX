@@ -10,17 +10,25 @@ export class ClipDownloadError extends Error {
 export type ClipSource = { videoId: string } | { storagePath: string } | { r2Key: string };
 
 export const ClipDownloadService = {
-  async downloadClip(source: ClipSource, start: number, end: number, filename: string, vertical = false): Promise<void> {
+  async downloadClip(
+    source: ClipSource,
+    start: number,
+    end: number,
+    filename: string,
+    vertical = false,
+    onProgress?: (percent: number) => void
+  ): Promise<void> {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     const { data: { session } } = await supabase.auth.getSession();
     const accessToken = session?.access_token || anonKey;
 
-    // supabase-js's functions.invoke() decides how to parse the response body
-    // from its content-type, which is unreliable for a binary video/mp4
-    // response — it's not guaranteed to hand back a Blob. Fetch directly so
-    // we control exactly how the response is read.
+    // The VM cuts the clip and uploads it straight to Cloudflare R2, handing
+    // back a signed URL instead of the file bytes — the Edge Function only
+    // ever sees a small JSON payload here, never the video itself. This lets
+    // the browser download the final file directly from R2's network instead
+    // of relaying it through the VM's own (bandwidth-limited) connection.
     const response = await fetch(`${supabaseUrl}/functions/v1/clip-video`, {
       method: "POST",
       headers: {
@@ -31,20 +39,37 @@ export const ClipDownloadService = {
       body: JSON.stringify({ ...source, start, end, vertical }),
     });
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!response.ok || contentType.includes("json")) {
-      let message = "Não foi possível gerar o corte do vídeo.";
-      try {
-        const parsed = await response.json();
-        if (parsed?.message) message = parsed.message;
-      } catch {
-        // keep default message
-      }
-      throw new ClipDownloadError(message, "CLIP_FAILED");
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // keep payload null, handled below
     }
 
-    const blob = await response.blob();
+    if (!response.ok || !payload?.success || !payload?.downloadUrl) {
+      throw new ClipDownloadError(payload?.message || "Não foi possível gerar o corte do vídeo.", payload?.code || "CLIP_FAILED");
+    }
+
+    const fileResponse = await fetch(payload.downloadUrl);
+    if (!fileResponse.ok || !fileResponse.body) {
+      throw new ClipDownloadError("Não foi possível baixar o corte gerado.", "DOWNLOAD_FAILED");
+    }
+
+    const totalBytes = Number(fileResponse.headers.get("content-length")) || 0;
+    const reader = fileResponse.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (totalBytes > 0) onProgress?.(Math.min(100, Math.round((received / totalBytes) * 100)));
+    }
+    onProgress?.(100);
+
+    const blob = new Blob(chunks as BlobPart[], { type: "video/mp4" });
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objectUrl;

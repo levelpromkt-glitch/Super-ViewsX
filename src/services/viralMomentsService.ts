@@ -31,9 +31,16 @@ export type FindBestMomentsResult = {
   videoTopic?: string;
 };
 
+// Auxiliary hints extracted from the raw audio (loudness spikes, overlapping
+// speech) that the transcript text alone doesn't capture. Only available for
+// the upload path (the VM has the audio); passed to viral-moments as extra
+// context so the AI can factor in tension/energy it can't read from words.
+export type AudioSignal = { time: number; type: "energy_peak" | "interruption"; detail?: string };
+
 export type TranscribeUploadResult = {
   lines: TranscriptLine[];
   videoDurationSec: number;
+  audioSignals?: AudioSignal[];
 };
 
 export const ViralMomentsService = {
@@ -115,7 +122,7 @@ export const ViralMomentsService = {
 
       if (data.status === "completed") {
         const result = data.result as TranscribeUploadResult;
-        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0 };
+        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0, audioSignals: result.audioSignals };
       }
       if (data.status === "failed") {
         throw new ViralMomentsError(data.error_message || "Falha ao transcrever o vídeo.", "JOB_FAILED");
@@ -132,10 +139,11 @@ export const ViralMomentsService = {
     videoId: string,
     title: string,
     lines: TranscriptLine[],
-    duration: DurationPreset
+    duration: DurationPreset,
+    audioSignals?: AudioSignal[]
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration },
+      body: { videoId, title, lines, duration, audioSignals },
     });
 
     if (error) {

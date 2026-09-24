@@ -22,6 +22,7 @@ const DEFAULT_DURATION: [number, number] = [10, 90];
 const MIN_CLIP_SECONDS = 10;
 
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
+type AudioSignal = { time: number; type: "energy_peak" | "interruption"; detail?: string };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -130,7 +131,8 @@ const setCache = async (cacheSeed: string, videoId: string, response: unknown) =
 const buildPrompt = (
   title: string,
   lines: TranscriptLine[],
-  duration: [number, number]
+  duration: [number, number],
+  audioSignals?: AudioSignal[]
 ) => {
   const transcriptText = lines
     .slice(0, MAX_LINES)
@@ -138,6 +140,23 @@ const buildPrompt = (
     .join("\n");
 
   const [minSec, maxSec] = duration;
+
+  // Extra hints from raw-audio analysis (loudness spikes, overlapping speech)
+  // that the transcript text alone can't show — see server.js's
+  // detectEnergyPeaks/detectInterruptions for how these are computed.
+  const audioSignalsText = audioSignals && audioSignals.length > 0
+    ? "\n\n## Sinais de áudio detectados automaticamente (apoio, não é texto da fala)\n\nEstes pontos vêm de uma análise do áudio bruto (volume e sobreposição de fala), não da transcrição. Use como indício extra de tensão, energia ou humor — nunca como único motivo para aprovar um trecho, e nunca cite isso na headline ou no reason.\n\n" +
+      audioSignals
+        .map((s) => {
+          const mm = String(Math.floor(s.time / 60)).padStart(2, "0");
+          const ss = String(s.time % 60).padStart(2, "0");
+          const label = s.type === "interruption"
+            ? "fala sobreposta/interrupção (possível tensão ou discordância)"
+            : "pico de volume/energia na voz";
+          return `[${mm}:${ss}] ${label}`;
+        })
+        .join("\n")
+    : "";
 
   return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. O criador que vai receber esses cortes vive de volume: participa de competições de clipagem (minutagem mínima ${MIN_CLIP_SECONDS}s), posta em TikTok, Instagram e YouTube, e precisa do maior número possível de oportunidades genuinamente fortes desse vídeo — não só a melhor. Sua função não é "achar 1 trecho perfeito" — é vasculhar o vídeo inteiro e devolver TODOS os trechos que passem no teste de admissão abaixo.
 
@@ -214,6 +233,7 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
+${audioSignalsText}
 
 Chame a tool "return_moments" com o resultado. Não responda em texto — use apenas a tool.`;
 };
@@ -230,6 +250,7 @@ serve(async (req) => {
     const lines: TranscriptLine[] = Array.isArray(body?.lines) ? body.lines : [];
     const durationKey: string = body?.duration;
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
+    const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
 
     if (!videoId || typeof videoId !== 'string') {
       return new Response(
@@ -244,7 +265,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v10-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v11-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -263,7 +284,7 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    const prompt = buildPrompt(title, lines, duration);
+    const prompt = buildPrompt(title, lines, duration, audioSignals);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -292,6 +313,7 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
+    console.log('DEBUG stop_reason', aiData?.stop_reason, 'usage', JSON.stringify(aiData?.usage));
     const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
     const rawInput = toolBlock?.input as any;
 

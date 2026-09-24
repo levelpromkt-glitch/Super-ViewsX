@@ -4,7 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
@@ -50,9 +50,51 @@ function cleanup(dir) {
   fs.rm(dir, { recursive: true, force: true }, () => {});
 }
 
-function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
+function getR2Client() {
+  return new S3Client({
+    region: "auto",
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  });
+}
+
+// Uploads the finished clip to R2 and responds with a signed download URL
+// instead of streaming the file through this process — the browser downloads
+// straight from R2's network afterwards, which is far less bandwidth-limited
+// than this single VM.
+async function uploadClipAndRespond(res, tmpDir, filePath, filename) {
+  try {
+    const key = `clips/${crypto.randomBytes(8).toString("hex")}.mp4`;
+    const body = fs.readFileSync(filePath);
+    const s3 = getR2Client();
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: body,
+      ContentType: "video/mp4",
+    }));
+    const downloadUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }),
+      { expiresIn: 3600 }
+    );
+    if (!res.headersSent) res.json({ success: true, downloadUrl, filename });
+  } catch (err) {
+    console.error("R2 clip upload failed", err);
+    if (!res.headersSent) {
+      res.status(502).json({ error: "UPLOAD_FAILED", message: "Não foi possível preparar o download do corte." });
+    }
+  } finally {
+    cleanup(tmpDir);
+  }
+}
+
+async function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
   if (!vertical) {
-    streamFile(res, filePath, tmpDir, `${filenameBase}.mp4`);
+    await uploadClipAndRespond(res, tmpDir, filePath, `${filenameBase}.mp4`);
     return;
   }
 
@@ -66,7 +108,7 @@ function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
     cleanup(tmpDir);
     if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
   });
-  py.on("close", (pyCode) => {
+  py.on("close", async (pyCode) => {
     if (pyCode !== 0 || !fs.existsSync(verticalPath)) {
       console.error("vertical_crop failed", pyCode, pyStderr.slice(-2000));
       cleanup(tmpDir);
@@ -75,7 +117,7 @@ function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
       }
       return;
     }
-    streamFile(res, verticalPath, tmpDir, `${filenameBase}-vertical.mp4`);
+    await uploadClipAndRespond(res, tmpDir, verticalPath, `${filenameBase}-vertical.mp4`);
   });
 }
 
@@ -225,6 +267,74 @@ app.post("/clip", (req, res) => {
   });
 });
 
+// Runs ffmpeg's ebur128 loudness filter over the audio and returns the raw
+// stderr text, which prints one "t: <seconds> M: <momentary LUFS>" line
+// roughly every 100ms. No output file needed, so it's discarded to /dev/null
+// equivalent (`-f null -`) — we only want the printed stats.
+function analyzeLoudness(audioPath) {
+  return new Promise((resolve) => {
+    const ff = spawn("ffmpeg", ["-i", audioPath, "-filter_complex", "ebur128", "-f", "null", "-"]);
+    let stderr = "";
+    ff.stderr.on("data", (d) => { stderr += d.toString(); });
+    ff.on("close", () => resolve(stderr));
+    ff.on("error", () => resolve(""));
+  });
+}
+
+function parseEbur128Loudness(stderrText) {
+  const points = [];
+  const re = /t:\s*([\d.]+)\s+M:\s*(-?[\d.]+|-inf)/g;
+  let match;
+  while ((match = re.exec(stderrText)) !== null) {
+    const t = parseFloat(match[1]);
+    const m = match[2] === "-inf" ? -70 : parseFloat(match[2]);
+    if (Number.isFinite(t) && Number.isFinite(m)) points.push({ t, m });
+  }
+  return points;
+}
+
+// Flags timestamps where the voice gets meaningfully louder than the video's
+// own median loudness — a proxy for excitement/energy that plain transcript
+// text can't capture. Collapses nearby points into one event per ~5s window.
+function detectEnergyPeaks(points) {
+  const values = points.map((p) => p.m).filter((v) => v > -60).sort((a, b) => a - b);
+  if (values.length === 0) return [];
+  const median = values[Math.floor(values.length / 2)];
+  const threshold = median + 8;
+  const events = [];
+  let lastEventTime = -Infinity;
+  for (const p of points) {
+    if (p.m >= threshold && p.t - lastEventTime >= 5) {
+      events.push({ time: Math.floor(p.t), type: "energy_peak" });
+      lastEventTime = p.t;
+    }
+  }
+  return events;
+}
+
+// Flags timestamps where a different speaker starts talking before the
+// previous one finished — a proxy for tension/disagreement/interruption that
+// the transcript text alone doesn't signal (it just reads as two lines).
+function detectInterruptions(utterances) {
+  const events = [];
+  let lastEventTime = -Infinity;
+  for (let i = 1; i < utterances.length; i++) {
+    const prev = utterances[i - 1];
+    const cur = utterances[i];
+    if (
+      cur.speaker !== undefined &&
+      prev.speaker !== undefined &&
+      cur.speaker !== prev.speaker &&
+      cur.start < prev.end - 0.3 &&
+      cur.start - lastEventTime >= 5
+    ) {
+      events.push({ time: Math.floor(cur.start), type: "interruption" });
+      lastEventTime = cur.start;
+    }
+  }
+  return events;
+}
+
 // Shared by the synchronous /transcribe endpoint and the async job worker.
 // Not bound by any Supabase Edge Function wall-clock limit — this runs
 // directly on the VM, so a 2-hour podcast is just as fine as a 5-minute one.
@@ -266,17 +376,20 @@ function transcribeFromUrl(sourceUrl) {
 
       try {
         const audioBuffer = fs.readFileSync(audioPath);
-        const dgResponse = await fetch(
-          "https://api.deepgram.com/v1/listen?model=nova-2&language=pt&smart_format=true&utterances=true&punctuate=true",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Token ${deepgramKey}`,
-              "Content-Type": "audio/mpeg",
-            },
-            body: audioBuffer,
-          }
-        );
+        const [dgResponse, loudnessStderr] = await Promise.all([
+          fetch(
+            "https://api.deepgram.com/v1/listen?model=nova-2&language=pt&smart_format=true&utterances=true&punctuate=true&diarize=true",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Token ${deepgramKey}`,
+                "Content-Type": "audio/mpeg",
+              },
+              body: audioBuffer,
+            }
+          ),
+          analyzeLoudness(audioPath),
+        ]);
 
         if (!dgResponse.ok) {
           const errText = await dgResponse.text();
@@ -305,8 +418,21 @@ function transcribeFromUrl(sourceUrl) {
             };
           });
 
+        // Extra hints beyond the words themselves — see detectEnergyPeaks/
+        // detectInterruptions above. Best-effort: any failure here shouldn't
+        // fail the whole transcription, so audioSignals just comes back empty.
+        let audioSignals = [];
+        try {
+          const loudnessPoints = parseEbur128Loudness(loudnessStderr);
+          const energyPeaks = detectEnergyPeaks(loudnessPoints);
+          const interruptions = detectInterruptions(utterances);
+          audioSignals = [...energyPeaks, ...interruptions].sort((a, b) => a.time - b.time).slice(0, 60);
+        } catch (signalErr) {
+          console.error("audio signal analysis failed", signalErr);
+        }
+
         cleanup(tmpDir);
-        resolve({ lines, videoDurationSec });
+        resolve({ lines, videoDurationSec, audioSignals });
       } catch (err) {
         console.error("transcribe failed", err);
         cleanup(tmpDir);
@@ -413,27 +539,11 @@ async function resolveJobSourceUrl(source) {
 }
 
 function getR2SignedGetUrl(key) {
-  const s3 = new S3Client({
-    region: "auto",
-    endpoint: process.env.R2_ENDPOINT,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+  const s3 = getR2Client();
   const command = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key });
   return getSignedUrl(s3, command, { expiresIn: 3600 });
 }
 
 setInterval(pollVideoJobs, JOB_POLL_INTERVAL_MS);
-
-function streamFile(res, filePath, tmpDir, filename) {
-  res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  const stream = fs.createReadStream(filePath);
-  stream.pipe(res);
-  stream.on("close", () => cleanup(tmpDir));
-  stream.on("error", () => cleanup(tmpDir));
-}
 
 app.listen(PORT, () => console.log(`Clip service listening on port ${PORT}`));
