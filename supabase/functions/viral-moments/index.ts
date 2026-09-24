@@ -71,8 +71,7 @@ const setCache = async (cacheSeed: string, videoId: string, response: unknown) =
 const buildPrompt = (
   title: string,
   lines: TranscriptLine[],
-  duration: [number, number],
-  viralHook: boolean
+  duration: [number, number]
 ) => {
   const transcriptText = lines
     .slice(0, MAX_LINES)
@@ -80,12 +79,6 @@ const buildPrompt = (
     .join("\n");
 
   const [minSec, maxSec] = duration;
-
-  const hookInstructions = viralHook
-    ? `
-
-GANCHO VIRAL (modo adicional, obrigatório): os primeiros 2-3 segundos de CADA trecho aprovado precisam ser literalmente a frase do "trigger" (hook) abaixo — não uma introdução antes dela. Se o hook mais forte de uma ideia não estiver no início do recorte óbvio, mova o "start" pra começar exatamente nessa frase (mesmo perdendo um pouco de contexto), e preencha "hookReason" explicando por que ela prende atenção sem nenhum contexto anterior.`
-    : "";
 
   return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. O criador que vai receber esses cortes vive de volume: participa de competições de clipagem (minutagem mínima ${MIN_CLIP_SECONDS}s), posta em TikTok, Instagram e YouTube, e precisa do maior número possível de oportunidades genuinamente fortes desse vídeo — não só a melhor. Sua função não é "achar 1 trecho perfeito" — é vasculhar o vídeo inteiro e devolver TODOS os trechos que passem no teste de admissão abaixo.
 
@@ -132,6 +125,24 @@ Se qualquer uma das três não existir explicitamente no texto, DESCARTE o trech
 - \`humor\`: setup mínimo → expectativa → ruptura → reação
 - \`transformation\`: antes/depois → ponto de mudança → processo → significado
 
+## Headlines — 3 variações por trecho, cada uma tem que fazer alguém parar de rolar o feed
+
+O criador escolhe qual usar como título do post; cada uma das 3 precisa ser forte o suficiente pra ser a única. Regras:
+
+- Específica, nunca vaga: um número, um nome, um resultado ou uma afirmação concreta — não "Isso vai te surpreender" ou "Você não vai acreditar nisso".
+- Abre um gap de curiosidade que só o vídeo resolve, mas sem mentir sobre o conteúdo (a promessa da headline tem que ser paga pelo trecho).
+- Frase curta, ritmo de fala, sem jargão. Cabe em uma linha de legenda de vídeo vertical (máx 60 caracteres).
+- As 3 variações usam ângulos DIFERENTES do mesmo trecho — não são sinônimos umas das outras. Exemplos de ângulos pra variar: a pergunta que o trecho responde vs. a afirmação polêmica vs. o número/resultado chocante vs. a virada de expectativa.
+- Nunca use reticências como muleta de suspense genérico ("Isso vai mudar tudo...") — se não dá pra ser específico, o trecho provavelmente não deveria ter sido aprovado.
+
+## Gancho viral — sempre calcule uma segunda opção de abertura mais agressiva
+
+Além do "start" natural (que já respeita hook/desenvolvimento/payoff com contexto), avalie se existe uma frase ESPECÍFICA dentro do mesmo trecho que funcionaria como abertura ainda mais forte se o corte começasse exatamente nela — sem nenhuma introdução antes, começando no meio da ação. Isso é o gancho viral: o corte literalmente COMEÇA nessa frase (é um corte seco ali, não um resumo dela).
+
+- Se essa frase existir e for genuinamente melhor que o início natural (mais direta, mais chocante, zero enrolação): preencha "hookStart" com o segundo (inteiro) exato onde ela começa, e "hookReason" explicando por que ela prende sem nenhum contexto anterior.
+- Se o "start" natural já É a frase mais forte possível (não existe nada melhor mais adiante no trecho), NÃO preencha "hookStart" nem "hookReason" — omita os dois campos. Não force um gancho artificial só para preencher o campo.
+- "hookStart" tem que estar entre "start" e "end" do próprio trecho (é um recorte mais agressivo do mesmo momento, não um trecho novo), e o corte de "hookStart" até "end" ainda precisa ter pelo menos ${MIN_CLIP_SECONDS} segundos.
+
 ## Regras finais
 
 - Duração de cada trecho aprovado ENTRE ${minSec} E ${maxSec} SEGUNDOS (nunca abaixo de ${MIN_CLIP_SECONDS}s — é a minutagem mínima aceita nas competições de clipagem que esses cortes vão disputar). Ajuste o corte (contexto antes/depois, ou aparar excesso) pra caber na faixa sem perder o sentido, mas nunca inclua um trecho que só cabe na faixa cortando o desenvolvimento ou o payoff.
@@ -139,15 +150,14 @@ Se qualquer uma das três não existir explicitamente no texto, DESCARTE o trech
 - MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15. Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
 - A única razão válida para descartar um candidato é ele genuinamente falhar no teste Hook/Desenvolvimento/Payoff, em um dos dois portões, ou em algum dos reprovadores automáticos acima — nunca descarte um trecho aprovado só porque já existem outros na lista.
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
-${hookInstructions}
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
 
 Responda APENAS com um JSON válido (sem markdown, sem texto antes ou depois), no formato:
-{"videoTopic":"1-2 frases sobre o assunto central e o nicho do vídeo (passo 0)","moments":[{"start":123,"end":167,"title":"Título curto e chamativo (máx 60 caracteres)","profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87${viralHook ? ',"hookReason":"Por que a frase do gancho prende sem contexto anterior (1 frase)"' : ""}}]}
+{"videoTopic":"1-2 frases sobre o assunto central e o nicho do vídeo (passo 0)","moments":[{"start":123,"end":167,"titles":["Headline 1","Headline 2","Headline 3"],"profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87,"hookStart":135,"hookReason":"Por que essa frase prende sem contexto anterior (1 frase) — omita este campo e hookStart se não houver gancho melhor que o início natural"}]}
 
-"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "score" é de 0 a 100 e reflete o quanto o trecho passou nos dois portões, não só o tema ser interessante. Ordene por score decrescente.`;
+"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "titles" tem sempre exatamente 3 headlines. "score" é de 0 a 100 e reflete o quanto o trecho passou nos dois portões, não só o tema ser interessante. Ordene por score decrescente.`;
 };
 
 serve(async (req) => {
@@ -161,7 +171,6 @@ serve(async (req) => {
     const title: string = body?.title || "";
     const lines: TranscriptLine[] = Array.isArray(body?.lines) ? body.lines : [];
     const durationKey: string = body?.duration;
-    const viralHook: boolean = body?.viralHook === true;
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
 
     if (!videoId || typeof videoId !== 'string') {
@@ -177,7 +186,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v6-${videoId}-${duration[0]}-${duration[1]}-${viralHook}`;
+    const cacheSeed = `viral-moments-v7-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -196,7 +205,7 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    const prompt = buildPrompt(title, lines, duration, viralHook);
+    const prompt = buildPrompt(title, lines, duration);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -252,16 +261,36 @@ serve(async (req) => {
 
     const moments = (parsed.moments || [])
       .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
-      .map((m, i) => ({
-        id: `m${i + 1}`,
-        start: Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec))),
-        end: Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec))),
-        title: String(m.title || 'Momento viral').slice(0, 120),
-        profile: VALID_PROFILES.includes(m.profile) ? m.profile : undefined,
-        reason: String(m.reason || '').slice(0, 300),
-        hookReason: viralHook ? String(m.hookReason || '').slice(0, 300) : undefined,
-        score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
-      }))
+      .map((m, i) => {
+        const start = Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec)));
+        const end = Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec)));
+        const titles = (Array.isArray(m.titles) ? m.titles : [m.title])
+          .filter((t: unknown) => typeof t === 'string' && t.trim())
+          .map((t: string) => t.slice(0, 80))
+          .slice(0, 4);
+        if (titles.length === 0) titles.push('Momento viral');
+
+        // hookStart is an alternate, more aggressive opening within the same
+        // clip. Only keep it if it's a real, valid, meaningfully different cut.
+        let hookStart: number | undefined;
+        if (typeof m.hookStart === 'number') {
+          const clamped = Math.max(start, Math.min(Math.floor(m.hookStart), end));
+          if (clamped > start && end - clamped >= MIN_CLIP_SECONDS) hookStart = clamped;
+        }
+
+        return {
+          id: `m${i + 1}`,
+          start,
+          end,
+          title: titles[0],
+          titles,
+          profile: VALID_PROFILES.includes(m.profile) ? m.profile : undefined,
+          reason: String(m.reason || '').slice(0, 300),
+          hookStart,
+          hookReason: hookStart !== undefined ? String(m.hookReason || '').slice(0, 300) : undefined,
+          score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
+        };
+      })
       // AI-reported timestamps can exceed the transcript's real length; drop
       // anything that becomes invalid (or falls under the competition's
       // minimum clip length) after clamping.

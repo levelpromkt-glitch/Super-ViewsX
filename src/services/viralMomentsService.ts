@@ -11,8 +11,10 @@ export type ViralMoment = {
   start: number;
   end: number;
   title: string;
+  titles: string[];
   profile?: NarrativeProfile;
   reason: string;
+  hookStart?: number;
   hookReason?: string;
   score: number;
 };
@@ -34,11 +36,10 @@ export const ViralMomentsService = {
     videoId: string,
     title: string,
     lines: TranscriptLine[],
-    duration: DurationPreset,
-    viralHook: boolean
+    duration: DurationPreset
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, viralHook },
+      body: { videoId, title, lines, duration },
     });
 
     if (error) {

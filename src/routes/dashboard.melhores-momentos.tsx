@@ -72,6 +72,17 @@ function formatDuration(sec: number) {
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
+function slugifyFilename(text: string) {
+  const slug = text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+  return slug || "corte";
+}
+
 function MelhoresMomentosPage() {
   const [url, setUrl] = useState("");
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -87,8 +98,15 @@ function MelhoresMomentosPage() {
 
   const [duration, setDuration] = useState<DurationPreset>("30-60");
   const [durationOpen, setDurationOpen] = useState(false);
-  const [viralHook, setViralHook] = useState(false);
   const durationRef = useRef<HTMLDivElement>(null);
+
+  // Per-card choices: which of the 3 headlines is selected, and whether to
+  // use the AI's more aggressive hook-cut opening instead of the natural start.
+  const [selectedTitle, setSelectedTitle] = useState<Record<string, number>>({});
+  const [useHook, setUseHook] = useState<Record<string, boolean>>({});
+
+  const getEffectiveStart = (m: ViralMoment) => (useHook[m.id] && m.hookStart !== undefined ? m.hookStart : m.start);
+  const getEffectiveTitle = (m: ViralMoment) => m.titles[selectedTitle[m.id] ?? 0] ?? m.title;
 
   const [tiktokConnected, setTiktokConnected] = useState<boolean | null>(null);
   const [publishTarget, setPublishTarget] = useState<ViralMoment | null>(null);
@@ -130,13 +148,15 @@ function MelhoresMomentosPage() {
     setMoments(null);
     setVideoTopic(null);
     setActiveMoment(null);
+    setSelectedTitle({});
+    setUseHook({});
     setLoading(true);
     setLoadingStatus("Transcrevendo o vídeo...");
 
     try {
       const transcript = await TranscriptService.getTranscript(id);
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration, viralHook);
+      const result = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
@@ -159,7 +179,9 @@ function MelhoresMomentosPage() {
     setDownloadError(null);
     setDownloadingId(m.id);
     try {
-      await ClipDownloadService.downloadClip(videoId, m.start, m.end, `${videoId}-${m.start}-${m.end}.mp4`);
+      const start = getEffectiveStart(m);
+      const filename = `${slugifyFilename(getEffectiveTitle(m))}.mp4`;
+      await ClipDownloadService.downloadClip(videoId, start, m.end, filename);
     } catch (error: any) {
       setDownloadError(
         error instanceof ClipDownloadError ? error.message : "Erro inesperado ao baixar o corte."
@@ -172,7 +194,7 @@ function MelhoresMomentosPage() {
   const handleOpenPublish = (m: ViralMoment) => {
     setPublishError(null);
     setPublishTarget(m);
-    setCaptionDraft(m.title);
+    setCaptionDraft(getEffectiveTitle(m));
   };
 
   const handleConfirmPublish = async () => {
@@ -180,7 +202,8 @@ function MelhoresMomentosPage() {
     setPublishError(null);
     setPublishingId(publishTarget.id);
     try {
-      await SocialAccountsService.publishToTikTok(videoId, publishTarget.start, publishTarget.end, captionDraft);
+      const start = getEffectiveStart(publishTarget);
+      await SocialAccountsService.publishToTikTok(videoId, start, publishTarget.end, captionDraft);
       setPublishedIds((prev) => new Set(prev).add(publishTarget.id));
       setPublishTarget(null);
     } catch (error: any) {
@@ -191,7 +214,7 @@ function MelhoresMomentosPage() {
   };
 
   const embedSrc = activeMoment && videoId
-    ? `https://www.youtube.com/embed/${videoId}?start=${activeMoment.start}&end=${activeMoment.end}&autoplay=1`
+    ? `https://www.youtube.com/embed/${videoId}?start=${getEffectiveStart(activeMoment)}&end=${activeMoment.end}&autoplay=1`
     : "";
 
   return (
@@ -265,19 +288,6 @@ function MelhoresMomentosPage() {
             )}
           </button>
         </div>
-        <button
-          type="button"
-          className="hs-btn-ghost"
-          style={{
-            width: "fit-content",
-            borderColor: viralHook ? "var(--primary-lime)" : undefined,
-            color: viralHook ? "var(--primary-lime)" : undefined,
-          }}
-          onClick={() => setViralHook((v) => !v)}
-        >
-          <Anchor size={12} />
-          Gancho viral {viralHook ? "ativado" : "desativado"}
-        </button>
         {urlError && <div className="tr-error">{urlError}</div>}
         <p className="hs-disclaimer">
           Use esta ferramenta como fonte de inspiração. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
@@ -385,7 +395,11 @@ function MelhoresMomentosPage() {
             </div>
           ) : (
             <section className="hs-grid">
-              {moments.map((m) => (
+              {moments.map((m) => {
+                const effectiveStart = getEffectiveStart(m);
+                const titleIndex = selectedTitle[m.id] ?? 0;
+                const hookOn = useHook[m.id] === true;
+                return (
                 <article key={m.id} className="hs-card">
                   <div
                     className="hs-thumb"
@@ -407,7 +421,29 @@ function MelhoresMomentosPage() {
                     </span>
                   </div>
                   <div className="hs-card-body">
-                    <h3 className="hs-card-title m-0">{m.title}</h3>
+                    <h3 className="hs-card-title m-0">{getEffectiveTitle(m)}</h3>
+                    {m.titles.length > 1 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                        {m.titles.map((t, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="hs-btn-ghost"
+                            style={{
+                              flex: "none",
+                              padding: "3px 9px",
+                              fontSize: ".7rem",
+                              borderColor: titleIndex === i ? "var(--primary-lime)" : undefined,
+                              color: titleIndex === i ? "var(--primary-lime)" : undefined,
+                            }}
+                            onClick={() => setSelectedTitle((prev) => ({ ...prev, [m.id]: i }))}
+                            title={t}
+                          >
+                            Headline {i + 1}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {m.profile && (
                       <span className="hs-card-tag" style={{ marginLeft: 0 }}>
                         {PROFILE_LABELS[m.profile]}
@@ -415,18 +451,29 @@ function MelhoresMomentosPage() {
                     )}
                     <div className="hs-card-row">
                       <span className="hs-card-views">
-                        <Clock size={12} /> {formatTime(m.start)} – {formatTime(m.end)}
+                        <Clock size={12} /> {formatTime(effectiveStart)} – {formatTime(m.end)}
                       </span>
-                      <span className="hs-card-time">{formatDuration(m.end - m.start)}</span>
+                      <span className="hs-card-time">{formatDuration(m.end - effectiveStart)}</span>
                     </div>
                     <div className="hs-card-meta">
                       <span style={{ display: "block", lineHeight: 1.4 }}>{m.reason}</span>
                     </div>
-                    {m.hookReason && (
+                    {m.hookStart !== undefined && (
                       <div className="hs-card-meta">
-                        <span style={{ display: "flex", gap: 4, lineHeight: 1.4, color: "var(--primary-lime)" }}>
-                          <Anchor size={12} style={{ flexShrink: 0, marginTop: 2 }} /> {m.hookReason}
-                        </span>
+                        <label style={{ display: "flex", gap: 6, alignItems: "flex-start", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={hookOn}
+                            onChange={(e) => setUseHook((prev) => ({ ...prev, [m.id]: e.target.checked }))}
+                            style={{ marginTop: 3 }}
+                          />
+                          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <span style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--primary-lime)", fontWeight: 600 }}>
+                              <Anchor size={12} /> Usar corte com gancho viral
+                            </span>
+                            {hookOn && <span style={{ lineHeight: 1.4 }}>{m.hookReason}</span>}
+                          </span>
+                        </label>
                       </div>
                     )}
                     <div className="hs-card-actions">
@@ -450,7 +497,7 @@ function MelhoresMomentosPage() {
                       </button>
                       <a
                         className="hs-btn-ghost"
-                        href={`https://www.youtube.com/watch?v=${videoId}&t=${m.start}s`}
+                        href={`https://www.youtube.com/watch?v=${videoId}&t=${effectiveStart}s`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -472,7 +519,8 @@ function MelhoresMomentosPage() {
                     </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </section>
           )}
         </>
