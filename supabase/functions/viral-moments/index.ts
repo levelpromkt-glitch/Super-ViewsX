@@ -27,6 +27,61 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Forcing the model to answer through a tool call (instead of asking for
+// "JSON in prose" and regex-extracting it) means Anthropic itself guarantees
+// schema-valid output — a long video producing many moments used to
+// occasionally break the old approach with a stray unescaped quote or a
+// response cut off mid-JSON; that whole class of failure is gone now.
+const MOMENTS_TOOL = {
+  name: "return_moments",
+  description: "Retorna os melhores momentos identificados no vídeo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      videoTopic: {
+        type: "string",
+        description: "1-2 frases sobre o assunto central e o nicho do vídeo (passo 0).",
+      },
+      moments: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            start: { type: "integer", description: "Início do trecho em segundos." },
+            end: { type: "integer", description: "Fim do trecho em segundos." },
+            titles: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 3,
+              maxItems: 3,
+              description: "Exatamente 3 variações de headline, cada uma com um ângulo diferente do mesmo trecho.",
+            },
+            profile: {
+              type: "string",
+              enum: ["fast_answer", "contrarian", "money", "story", "humor", "transformation"],
+            },
+            reason: {
+              type: "string",
+              description: "O hook e o payoff do trecho em 1 frase (o que prende e o que resolve).",
+            },
+            score: { type: "integer", description: "0 a 100, o quanto o trecho passou nos dois portões." },
+            hookStart: {
+              type: "integer",
+              description: "Segundo exato de uma abertura mais agressiva dentro do mesmo trecho, só se existir uma genuinamente melhor que o início natural. Omita este campo se não houver.",
+            },
+            hookReason: {
+              type: "string",
+              description: "Por que a frase de hookStart prende sem contexto anterior. Só incluir junto com hookStart.",
+            },
+          },
+          required: ["start", "end", "titles", "profile", "reason", "score"],
+        },
+      },
+    },
+    required: ["videoTopic", "moments"],
+  },
+};
+
 const generateCacheKey = async (text: string) => {
   const msgUint8 = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
@@ -134,6 +189,7 @@ O criador escolhe qual usar como título do post; cada uma das 3 precisa ser for
 - Frase curta, ritmo de fala, sem jargão. Cabe em uma linha de legenda de vídeo vertical (máx 60 caracteres).
 - As 3 variações usam ângulos DIFERENTES do mesmo trecho — não são sinônimos umas das outras. Exemplos de ângulos pra variar: a pergunta que o trecho responde vs. a afirmação polêmica vs. o número/resultado chocante vs. a virada de expectativa.
 - Nunca use reticências como muleta de suspense genérico ("Isso vai mudar tudo...") — se não dá pra ser específico, o trecho provavelmente não deveria ter sido aprovado.
+- Nunca use aspas dentro do texto da headline — parafraseie em vez de citar literalmente, para não quebrar nada na hora de estruturar a resposta.
 
 ## Gancho viral — sempre calcule uma segunda opção de abertura mais agressiva
 
@@ -150,14 +206,12 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 - MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15. Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
 - A única razão válida para descartar um candidato é ele genuinamente falhar no teste Hook/Desenvolvimento/Payoff, em um dos dois portões, ou em algum dos reprovadores automáticos acima — nunca descarte um trecho aprovado só porque já existem outros na lista.
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
+- "start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
 
 Transcrição (formato [MM:SS] texto):
 ${transcriptText}
 
-Responda APENAS com um JSON válido (sem markdown, sem texto antes ou depois), no formato:
-{"videoTopic":"1-2 frases sobre o assunto central e o nicho do vídeo (passo 0)","moments":[{"start":123,"end":167,"titles":["Headline 1","Headline 2","Headline 3"],"profile":"fast_answer|contrarian|money|story|humor|transformation","reason":"O hook e o payoff em 1 frase (o que prende e o que resolve)","score":87,"hookStart":135,"hookReason":"Por que essa frase prende sem contexto anterior (1 frase) — omita este campo e hookStart se não houver gancho melhor que o início natural"}]}
-
-"start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. "titles" tem sempre exatamente 3 headlines. "score" é de 0 a 100 e reflete o quanto o trecho passou nos dois portões, não só o tema ser interessante. Ordene por score decrescente.`;
+Chame a tool "return_moments" com o resultado. Não responda em texto — use apenas a tool.`;
 };
 
 serve(async (req) => {
@@ -186,7 +240,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v7-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v8-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -218,6 +272,8 @@ serve(async (req) => {
         model: ANTHROPIC_MODEL,
         max_tokens: 8000,
         thinking: { type: 'disabled' },
+        tools: [MOMENTS_TOOL],
+        tool_choice: { type: 'tool', name: 'return_moments' },
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -232,23 +288,11 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
-    const textBlock = (aiData?.content || []).find((b: any) => b.type === 'text');
-    const rawText: string = textBlock?.text || '';
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
+    const parsed = toolBlock?.input as { moments?: any[]; videoTopic?: string } | undefined;
 
-    if (!jsonMatch) {
-      console.error('No JSON found in AI response', rawText);
-      return new Response(
-        JSON.stringify({ success: false, code: 'AI_PARSE_ERROR', message: 'Não foi possível interpretar a resposta da IA.' }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    let parsed: { moments: any[]; videoTopic?: string };
-    try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      console.error('JSON parse error', e, rawText);
+    if (!parsed || !Array.isArray(parsed.moments)) {
+      console.error('No tool_use block in AI response', JSON.stringify(aiData).slice(0, 2000));
       return new Response(
         JSON.stringify({ success: false, code: 'AI_PARSE_ERROR', message: 'Não foi possível interpretar a resposta da IA.' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
