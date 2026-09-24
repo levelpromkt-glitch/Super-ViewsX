@@ -1,10 +1,25 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { S3Client, GetObjectCommand } from "npm:@aws-sdk/client-s3@3";
+import { getSignedUrl } from "npm:@aws-sdk/s3-request-presigner@3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+function getR2SignedGetUrl(key: string) {
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint: Deno.env.get("R2_ENDPOINT")!,
+    credentials: {
+      accessKeyId: Deno.env.get("R2_ACCESS_KEY_ID")!,
+      secretAccessKey: Deno.env.get("R2_SECRET_ACCESS_KEY")!,
+    },
+  });
+  const command = new GetObjectCommand({ Bucket: Deno.env.get("R2_BUCKET_NAME")!, Key: key });
+  return getSignedUrl(s3, command, { expiresIn: 3600 });
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -36,25 +51,31 @@ serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const storagePath: string = body?.storagePath;
+    const storagePath: string | undefined = body?.storagePath;
+    const r2Key: string | undefined = body?.r2Key;
 
-    if (!storagePath || !storagePath.startsWith(`${user.id}/`)) {
+    if ((!storagePath || !storagePath.startsWith(`${user.id}/`)) && (!r2Key || !r2Key.startsWith(`${user.id}/`))) {
       return new Response(
         JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'Arquivo de vídeo inválido.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { data: signed, error: signError } = await admin.storage
-      .from('post-videos')
-      .createSignedUrl(storagePath, 3600);
-
-    if (signError || !signed?.signedUrl) {
-      console.error('createSignedUrl failed', signError);
-      return new Response(
-        JSON.stringify({ success: false, code: 'STORAGE_ERROR', message: 'Não foi possível acessar o vídeo enviado.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let sourceUrl: string;
+    if (r2Key) {
+      sourceUrl = await getR2SignedGetUrl(r2Key);
+    } else {
+      const { data: signed, error: signError } = await admin.storage
+        .from('post-videos')
+        .createSignedUrl(storagePath!, 3600);
+      if (signError || !signed?.signedUrl) {
+        console.error('createSignedUrl failed', signError);
+        return new Response(
+          JSON.stringify({ success: false, code: 'STORAGE_ERROR', message: 'Não foi possível acessar o vídeo enviado.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      sourceUrl = signed.signedUrl;
     }
 
     const serviceUrl = Deno.env.get('CLIP_SERVICE_URL');
@@ -72,7 +93,7 @@ serve(async (req) => {
         'content-type': 'application/json',
         ...(serviceApiKey ? { 'x-api-key': serviceApiKey } : {}),
       },
-      body: JSON.stringify({ sourceUrl: signed.signedUrl }),
+      body: JSON.stringify({ sourceUrl }),
     });
 
     if (!transcribeResponse.ok) {

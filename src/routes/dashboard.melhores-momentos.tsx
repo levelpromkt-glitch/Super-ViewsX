@@ -27,7 +27,7 @@ import type { TranscriptLine } from "@/services/transcript/types";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
-import { PostsService, PostsError, MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
+import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -230,6 +230,10 @@ function MelhoresMomentosPage() {
       setUrlError("Escolha um vídeo do seu computador.");
       return;
     }
+    if (uploadFile.size > MAX_SOURCE_VIDEO_BYTES) {
+      setUrlError(`O vídeo excede o limite de ${Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB.`);
+      return;
+    }
 
     setUrlError(null);
     setVideoId(null);
@@ -243,8 +247,8 @@ function MelhoresMomentosPage() {
     setLoadingStatus("Enviando vídeo...");
 
     try {
-      const path = await PostsService.uploadVideo(uploadFile, MAX_SOURCE_VIDEO_BYTES);
-      setStoragePath(path);
+      const key = await ViralMomentsService.uploadSourceVideoToR2(uploadFile);
+      setStoragePath(key);
 
       const manualLines = parsePastedTranscript(pastedTranscript);
       let lines: TranscriptLine[];
@@ -252,18 +256,16 @@ function MelhoresMomentosPage() {
         lines = manualLines;
       } else {
         setLoadingStatus("Transcrevendo o áudio do vídeo...");
-        const transcript = await ViralMomentsService.transcribeUpload(path);
+        const transcript = await ViralMomentsService.transcribeUpload({ r2Key: key });
         lines = transcript.lines;
       }
 
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(path, "", lines, duration);
+      const result = await ViralMomentsService.findBestMoments(key, "", lines, duration);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
-      if (error instanceof PostsError) {
-        setUrlError(error.message);
-      } else if (error instanceof ViralMomentsError) {
+      if (error instanceof ViralMomentsError) {
         setUrlError(error.message);
       } else {
         setUrlError("Ocorreu um erro inesperado ao analisar o vídeo.");
@@ -277,7 +279,7 @@ function MelhoresMomentosPage() {
 
   const handleAnalyze = () => (sourceMode === "youtube" ? handleAnalyzeYoutube() : handleAnalyzeUpload());
 
-  const clipSource: ClipSource | null = videoId ? { videoId } : storagePath ? { storagePath } : null;
+  const clipSource: ClipSource | null = videoId ? { videoId } : storagePath ? { r2Key: storagePath } : null;
 
   const handleDownload = async (m: ViralMoment, vertical = false) => {
     if (!clipSource) return;

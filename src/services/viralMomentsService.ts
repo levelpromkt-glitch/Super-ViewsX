@@ -37,9 +37,37 @@ export type TranscribeUploadResult = {
 };
 
 export const ViralMomentsService = {
-  async transcribeUpload(storagePath: string): Promise<TranscribeUploadResult> {
+  // Uploads a source video directly to Cloudflare R2 (bypassing Supabase
+  // Storage's 50MB free-tier project-wide cap, which a bucket-level limit
+  // can't override). Returns the R2 object key to use as the clip source.
+  async uploadSourceVideoToR2(file: File): Promise<string> {
+    const ext = file.name.split(".").pop() || "mp4";
+    const { data, error } = await supabase.functions.invoke("r2-upload-url", {
+      body: { ext },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao preparar o upload.");
+      throw new ViralMomentsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new ViralMomentsError(data?.message || "Erro ao preparar o upload.", data?.code || "UNKNOWN_ERROR");
+    }
+
+    const putResponse = await fetch(data.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "video/mp4" },
+      body: file,
+    });
+    if (!putResponse.ok) {
+      throw new ViralMomentsError("Falha ao enviar o vídeo.", "UPLOAD_FAILED");
+    }
+
+    return data.key as string;
+  },
+
+  async transcribeUpload(source: { storagePath: string } | { r2Key: string }): Promise<TranscribeUploadResult> {
     const { data, error } = await supabase.functions.invoke("transcribe-upload", {
-      body: { storagePath },
+      body: source,
     });
 
     if (error) {

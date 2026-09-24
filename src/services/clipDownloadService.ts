@@ -7,7 +7,7 @@ export class ClipDownloadError extends Error {
   }
 }
 
-export type ClipSource = { videoId: string } | { storagePath: string };
+export type ClipSource = { videoId: string } | { storagePath: string } | { r2Key: string };
 
 export const ClipDownloadService = {
   async downloadClip(source: ClipSource, start: number, end: number, filename: string, vertical = false): Promise<void> {
