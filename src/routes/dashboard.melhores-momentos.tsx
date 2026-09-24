@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Anchor,
   ArrowRight,
@@ -14,6 +14,7 @@ import {
   Play,
   Send,
   Sparkles,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -23,8 +24,9 @@ export const Route = createFileRoute("/dashboard/melhores-momentos")({
 
 import { TranscriptService, TranscriptError } from "@/services/transcriptService";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile } from "@/services/viralMomentsService";
-import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
+import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
+import { PostsService, PostsError } from "@/services/postsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -83,9 +85,18 @@ function slugifyFilename(text: string) {
   return slug || "corte";
 }
 
+type SourceMode = "youtube" | "upload";
+
 function MelhoresMomentosPage() {
+  const [sourceMode, setSourceMode] = useState<SourceMode>("youtube");
   const [url, setUrl] = useState("");
   const [videoId, setVideoId] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [storagePath, setStoragePath] = useState<string | null>(null);
+  const uploadObjectUrl = useMemo(() => (uploadFile ? URL.createObjectURL(uploadFile) : null), [uploadFile]);
+  useEffect(() => {
+    return () => { if (uploadObjectUrl) URL.revokeObjectURL(uploadObjectUrl); };
+  }, [uploadObjectUrl]);
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -132,7 +143,7 @@ function MelhoresMomentosPage() {
 
   const currentDurationLabel = DURATIONS.find((d) => d.id === duration)?.label ?? "";
 
-  const handleAnalyze = async () => {
+  const handleAnalyzeYoutube = async () => {
     const id = extractYouTubeId(url);
     if (!url.trim()) {
       setUrlError("Por favor, insira uma URL do YouTube.");
@@ -145,6 +156,7 @@ function MelhoresMomentosPage() {
 
     setUrlError(null);
     setVideoId(id);
+    setStoragePath(null);
     setMoments(null);
     setVideoTopic(null);
     setActiveMoment(null);
@@ -174,15 +186,60 @@ function MelhoresMomentosPage() {
     }
   };
 
+  const handleAnalyzeUpload = async () => {
+    if (!uploadFile) {
+      setUrlError("Escolha um vídeo do seu computador.");
+      return;
+    }
+
+    setUrlError(null);
+    setVideoId(null);
+    setStoragePath(null);
+    setMoments(null);
+    setVideoTopic(null);
+    setActiveMoment(null);
+    setSelectedTitle({});
+    setUseHook({});
+    setLoading(true);
+    setLoadingStatus("Enviando vídeo...");
+
+    try {
+      const path = await PostsService.uploadVideo(uploadFile);
+      setStoragePath(path);
+      setLoadingStatus("Transcrevendo o áudio do vídeo...");
+      const transcript = await ViralMomentsService.transcribeUpload(path);
+      setLoadingStatus("Analisando os melhores momentos com IA...");
+      const result = await ViralMomentsService.findBestMoments(path, "", transcript.lines, duration);
+      setMoments(result.moments);
+      setVideoTopic(result.videoTopic || null);
+    } catch (error: any) {
+      if (error instanceof PostsError) {
+        setUrlError(error.message);
+      } else if (error instanceof ViralMomentsError) {
+        setUrlError(error.message);
+      } else {
+        setUrlError("Ocorreu um erro inesperado ao analisar o vídeo.");
+      }
+      setStoragePath(null);
+    } finally {
+      setLoading(false);
+      setLoadingStatus("");
+    }
+  };
+
+  const handleAnalyze = () => (sourceMode === "youtube" ? handleAnalyzeYoutube() : handleAnalyzeUpload());
+
+  const clipSource: ClipSource | null = videoId ? { videoId } : storagePath ? { storagePath } : null;
+
   const handleDownload = async (m: ViralMoment, vertical = false) => {
-    if (!videoId) return;
+    if (!clipSource) return;
     setDownloadError(null);
     setDownloadingId(vertical ? `${m.id}-vertical` : m.id);
     try {
       const start = getEffectiveStart(m);
       const suffix = vertical ? "-vertical" : "";
       const filename = `${slugifyFilename(getEffectiveTitle(m))}${suffix}.mp4`;
-      await ClipDownloadService.downloadClip(videoId, start, m.end, filename, vertical);
+      await ClipDownloadService.downloadClip(clipSource, start, m.end, filename, vertical);
     } catch (error: any) {
       setDownloadError(
         error instanceof ClipDownloadError ? error.message : "Erro inesperado ao baixar o corte."
@@ -227,23 +284,66 @@ function MelhoresMomentosPage() {
             <Link2 size={16} className="tr-icon-lime" />
             <span>Melhores Momentos</span>
           </div>
-          <h2 className="tr-input-title">Cole o link do YouTube</h2>
+          <h2 className="tr-input-title">
+            {sourceMode === "youtube" ? "Cole o link do YouTube" : "Envie um vídeo do seu computador"}
+          </h2>
           <p className="tr-input-hint">
-            Nossa IA analisa a transcrição do vídeo e aponta os trechos com maior potencial viral para cortar em Shorts, Reels e TikTok.
+            {sourceMode === "youtube"
+              ? "Nossa IA analisa a transcrição do vídeo e aponta os trechos com maior potencial viral para cortar em Shorts, Reels e TikTok."
+              : "Sem passar pelo YouTube: a IA transcreve o áudio e corta direto do arquivo enviado, sem risco de bloqueio."}
           </p>
         </div>
-        <div className="tr-url-row">
-          <input
-            className="tr-input"
-            type="url"
-            placeholder="https://www.youtube.com/watch?v=..."
-            value={url}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              if (urlError) setUrlError(null);
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            className="hs-btn-ghost"
+            style={{
+              flex: "none",
+              borderColor: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
+              color: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
             }}
-            onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
-          />
+            onClick={() => { setSourceMode("youtube"); setUrlError(null); }}
+          >
+            <Link2 size={12} /> Colar link
+          </button>
+          <button
+            type="button"
+            className="hs-btn-ghost"
+            style={{
+              flex: "none",
+              borderColor: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
+              color: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
+            }}
+            onClick={() => { setSourceMode("upload"); setUrlError(null); }}
+          >
+            <Upload size={12} /> Enviar vídeo
+          </button>
+        </div>
+        <div className="tr-url-row">
+          {sourceMode === "youtube" ? (
+            <input
+              className="tr-input"
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                if (urlError) setUrlError(null);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
+            />
+          ) : (
+            <input
+              className="tr-input"
+              type="file"
+              accept="video/*"
+              onChange={(e) => {
+                setUploadFile(e.target.files?.[0] || null);
+                if (urlError) setUrlError(null);
+              }}
+              style={{ padding: 10 }}
+            />
+          )}
           <div className="hs-period" ref={durationRef}>
             <button
               type="button"
@@ -304,11 +404,11 @@ function MelhoresMomentosPage() {
       )}
 
       {/* Inline player for the selected moment */}
-      {activeMoment && videoId && (
+      {activeMoment && (videoId || (sourceMode === "upload" && uploadObjectUrl)) && (
         <section className="tr-card tr-fade">
           <div className="tr-card-head">
             <Sparkles size={18} className="tr-icon-lime" />
-            <h2>{activeMoment.title}</h2>
+            <h2>{getEffectiveTitle(activeMoment)}</h2>
             <button
               className="hs-btn-ghost"
               style={{ marginLeft: "auto", flex: "none" }}
@@ -319,13 +419,25 @@ function MelhoresMomentosPage() {
           </div>
           <div className="tr-video-card">
             <div className="tr-video-wrap">
-              <iframe
-                key={embedSrc}
-                src={embedSrc}
-                title={activeMoment.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              {sourceMode === "upload" && uploadObjectUrl ? (
+                <video
+                  key={`${activeMoment.id}-${getEffectiveStart(activeMoment)}`}
+                  src={uploadObjectUrl}
+                  controls
+                  autoPlay
+                  style={{ width: "100%", maxHeight: 480 }}
+                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = getEffectiveStart(activeMoment); }}
+                  onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= activeMoment.end) e.currentTarget.pause(); }}
+                />
+              ) : (
+                <iframe
+                  key={embedSrc}
+                  src={embedSrc}
+                  title={activeMoment.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )}
             </div>
           </div>
         </section>
@@ -496,26 +608,30 @@ function MelhoresMomentosPage() {
                           </>
                         )}
                       </button>
-                      <a
-                        className="hs-btn-ghost"
-                        href={`https://www.youtube.com/watch?v=${videoId}&t=${effectiveStart}s`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ArrowUpRight size={12} /> Abrir no YouTube
-                      </a>
-                      {tiktokConnected === false ? (
-                        <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
-                          <Send size={12} /> Conectar TikTok
-                        </Link>
-                      ) : publishedIds.has(m.id) ? (
-                        <span className="hs-btn-ghost" style={{ color: "var(--primary-lime)", cursor: "default" }}>
-                          <CheckCircle2 size={12} /> Publicado
-                        </span>
-                      ) : (
-                        <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={tiktokConnected === null}>
-                          <Send size={12} /> Publicar no TikTok
-                        </button>
+                      {sourceMode === "youtube" && (
+                        <a
+                          className="hs-btn-ghost"
+                          href={`https://www.youtube.com/watch?v=${videoId}&t=${effectiveStart}s`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ArrowUpRight size={12} /> Abrir no YouTube
+                        </a>
+                      )}
+                      {sourceMode === "youtube" && (
+                        tiktokConnected === false ? (
+                          <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
+                            <Send size={12} /> Conectar TikTok
+                          </Link>
+                        ) : publishedIds.has(m.id) ? (
+                          <span className="hs-btn-ghost" style={{ color: "var(--primary-lime)", cursor: "default" }}>
+                            <CheckCircle2 size={12} /> Publicado
+                          </span>
+                        ) : (
+                          <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={tiktokConnected === null}>
+                            <Send size={12} /> Publicar no TikTok
+                          </button>
+                        )
                       )}
                     </div>
                   </div>

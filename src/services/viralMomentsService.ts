@@ -31,7 +31,27 @@ export type FindBestMomentsResult = {
   videoTopic?: string;
 };
 
+export type TranscribeUploadResult = {
+  lines: TranscriptLine[];
+  videoDurationSec: number;
+};
+
 export const ViralMomentsService = {
+  async transcribeUpload(storagePath: string): Promise<TranscribeUploadResult> {
+    const { data, error } = await supabase.functions.invoke("transcribe-upload", {
+      body: { storagePath },
+    });
+
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao transcrever o vídeo enviado.");
+      throw new ViralMomentsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new ViralMomentsError(data?.message || "Erro ao transcrever o vídeo.", data?.code || "UNKNOWN_ERROR");
+    }
+    return { lines: data.lines as TranscriptLine[], videoDurationSec: data.videoDurationSec || 0 };
+  },
+
   async findBestMoments(
     videoId: string,
     title: string,
