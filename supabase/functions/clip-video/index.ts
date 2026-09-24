@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,11 +13,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { videoId, start, end, vertical } = body || {};
+    const { videoId, storagePath, start, end, vertical } = body || {};
 
-    if (typeof videoId !== 'string' || typeof start !== 'number' || typeof end !== 'number') {
+    if (typeof start !== 'number' || typeof end !== 'number') {
       return new Response(
-        JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'videoId, start e end são obrigatórios.' }),
+        JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'start e end são obrigatórios.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (typeof videoId !== 'string' && typeof storagePath !== 'string') {
+      return new Response(
+        JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'videoId ou storagePath é obrigatório.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -31,13 +38,55 @@ serve(async (req) => {
       );
     }
 
+    let clipBody: Record<string, unknown> = { start, end, vertical: vertical === true };
+
+    if (typeof storagePath === 'string') {
+      // Uploaded-file clip: scope to the authenticated user (same convention
+      // as the other storage-backed functions) and hand the VM a signed URL
+      // instead of a YouTube id — it never touches YouTube for this path.
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, code: 'UNAUTHENTICATED', message: 'Não autenticado.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const userClient = createClient(supabaseUrl, anonKey);
+      const jwt = authHeader.replace(/^Bearer\s+/i, '');
+      const { data: { user }, error: userError } = await userClient.auth.getUser(jwt);
+      if (userError || !user || !storagePath.startsWith(`${user.id}/`)) {
+        return new Response(
+          JSON.stringify({ success: false, code: 'UNAUTHENTICATED', message: 'Sessão inválida.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const admin = createClient(supabaseUrl, serviceKey);
+      const { data: signed, error: signError } = await admin.storage
+        .from('post-videos')
+        .createSignedUrl(storagePath, 3600);
+      if (signError || !signed?.signedUrl) {
+        console.error('createSignedUrl failed', signError);
+        return new Response(
+          JSON.stringify({ success: false, code: 'STORAGE_ERROR', message: 'Não foi possível acessar o vídeo enviado.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      clipBody.sourceUrl = signed.signedUrl;
+    } else {
+      clipBody.videoId = videoId;
+    }
+
     const clipResponse = await fetch(`${serviceUrl.replace(/\/$/, '')}/clip`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...(serviceApiKey ? { 'x-api-key': serviceApiKey } : {}),
       },
-      body: JSON.stringify({ videoId, start, end, vertical: vertical === true }),
+      body: JSON.stringify(clipBody),
     });
 
     if (!clipResponse.ok) {

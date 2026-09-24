@@ -48,16 +48,42 @@ function cleanup(dir) {
   fs.rm(dir, { recursive: true, force: true }, () => {});
 }
 
+function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
+  if (!vertical) {
+    streamFile(res, filePath, tmpDir, `${filenameBase}.mp4`);
+    return;
+  }
+
+  const verticalPath = path.join(tmpDir, "vertical.mp4");
+  const py = spawn("python3", ["vertical_crop.py", filePath, verticalPath], {
+    timeout: PROCESS_TIMEOUT_MS,
+  });
+  let pyStderr = "";
+  py.stderr.on("data", (d) => { pyStderr += d.toString(); });
+  py.on("error", (err) => {
+    cleanup(tmpDir);
+    if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
+  });
+  py.on("close", (pyCode) => {
+    if (pyCode !== 0 || !fs.existsSync(verticalPath)) {
+      console.error("vertical_crop failed", pyCode, pyStderr.slice(-2000));
+      cleanup(tmpDir);
+      if (!res.headersSent) {
+        res.status(502).json({ error: "VERTICAL_FAILED", message: "Não foi possível gerar a versão vertical." });
+      }
+      return;
+    }
+    streamFile(res, verticalPath, tmpDir, `${filenameBase}-vertical.mp4`);
+  });
+}
+
 app.post("/clip", (req, res) => {
   if (API_KEY && req.get("x-api-key") !== API_KEY) {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
 
-  const { videoId, start, end, vertical } = req.body || {};
+  const { videoId, sourceUrl, start, end, vertical } = req.body || {};
 
-  if (!isValidVideoId(videoId)) {
-    return res.status(400).json({ error: "INVALID_VIDEO_ID" });
-  }
   const s = Number(start);
   const e = Number(end);
   if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e <= s) {
@@ -73,6 +99,47 @@ app.post("/clip", (req, res) => {
   const jobId = crypto.randomBytes(8).toString("hex");
   const tmpDir = path.join(os.tmpdir(), `clip-${jobId}`);
   fs.mkdirSync(tmpDir, { recursive: true });
+
+  // Uploaded-file path: the video already lives in our own storage, so this
+  // is a plain ffmpeg cut against a signed URL — no yt-dlp, no proxy, no
+  // cookies, no bot-check, because YouTube is never involved.
+  if (typeof sourceUrl === "string" && sourceUrl.startsWith("http")) {
+    const outputPath = path.join(tmpDir, "clip.mp4");
+    const ff = spawn("ffmpeg", [
+      "-y",
+      "-ss", String(s),
+      "-i", sourceUrl,
+      "-t", String(e - s),
+      "-c", "copy",
+      "-avoid_negative_ts", "make_zero",
+      outputPath,
+    ], { timeout: PROCESS_TIMEOUT_MS });
+
+    let ffStderr = "";
+    ff.stderr.on("data", (d) => { ffStderr += d.toString(); });
+    ff.on("error", (err) => {
+      cleanup(tmpDir);
+      if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
+    });
+    ff.on("close", (code) => {
+      if (code !== 0 || !fs.existsSync(outputPath)) {
+        console.error("ffmpeg cut (sourceUrl) failed", code, ffStderr.slice(-2000));
+        cleanup(tmpDir);
+        if (!res.headersSent) {
+          res.status(502).json({ error: "DOWNLOAD_FAILED", message: "Não foi possível cortar o vídeo enviado." });
+        }
+        return;
+      }
+      finishClip(res, tmpDir, outputPath, vertical, `clip-upload-${s}-${e}`);
+    });
+    return;
+  }
+
+  if (!isValidVideoId(videoId)) {
+    cleanup(tmpDir);
+    return res.status(400).json({ error: "INVALID_VIDEO_ID" });
+  }
+
   const outputTemplate = path.join(tmpDir, "clip.%(ext)s");
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -152,33 +219,103 @@ app.post("/clip", (req, res) => {
     }
 
     const filePath = path.join(tmpDir, files[0]);
+    finishClip(res, tmpDir, filePath, vertical, `clip-${videoId}-${s}-${e}`);
+  });
+});
 
-    if (!vertical) {
-      streamFile(res, filePath, tmpDir, `clip-${videoId}-${s}-${e}.mp4`);
+app.post("/transcribe", (req, res) => {
+  if (API_KEY && req.get("x-api-key") !== API_KEY) {
+    return res.status(401).json({ error: "UNAUTHORIZED" });
+  }
+
+  const { sourceUrl } = req.body || {};
+  if (typeof sourceUrl !== "string" || !sourceUrl.startsWith("http")) {
+    return res.status(400).json({ error: "INVALID_REQUEST", message: "sourceUrl é obrigatório." });
+  }
+
+  const deepgramKey = process.env.DEEPGRAM_API_KEY;
+  if (!deepgramKey) {
+    return res.status(500).json({ error: "MISSING_CONFIG", message: "DEEPGRAM_API_KEY não configurada." });
+  }
+
+  const jobId = crypto.randomBytes(8).toString("hex");
+  const tmpDir = path.join(os.tmpdir(), `transcribe-${jobId}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const audioPath = path.join(tmpDir, "audio.mp3");
+
+  // Extract audio only: much smaller upload to Deepgram than the full video,
+  // and transcription quality doesn't need more than a modest bitrate.
+  const ff = spawn("ffmpeg", [
+    "-y", "-i", sourceUrl,
+    "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k",
+    audioPath,
+  ], { timeout: PROCESS_TIMEOUT_MS });
+
+  let ffStderr = "";
+  ff.stderr.on("data", (d) => { ffStderr += d.toString(); });
+  ff.on("error", (err) => {
+    cleanup(tmpDir);
+    if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
+  });
+  ff.on("close", async (code) => {
+    if (code !== 0 || !fs.existsSync(audioPath)) {
+      console.error("audio extraction failed", code, ffStderr.slice(-2000));
+      cleanup(tmpDir);
+      if (!res.headersSent) {
+        res.status(502).json({ error: "AUDIO_EXTRACT_FAILED", message: "Não foi possível extrair o áudio do vídeo." });
+      }
       return;
     }
 
-    const verticalPath = path.join(tmpDir, "vertical.mp4");
-    const py = spawn("python3", ["vertical_crop.py", filePath, verticalPath], {
-      timeout: PROCESS_TIMEOUT_MS,
-    });
-    let pyStderr = "";
-    py.stderr.on("data", (d) => { pyStderr += d.toString(); });
-    py.on("error", (err) => {
-      cleanup(tmpDir);
-      if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
-    });
-    py.on("close", (pyCode) => {
-      if (pyCode !== 0 || !fs.existsSync(verticalPath)) {
-        console.error("vertical_crop failed", pyCode, pyStderr.slice(-2000));
-        cleanup(tmpDir);
-        if (!res.headersSent) {
-          res.status(502).json({ error: "VERTICAL_FAILED", message: "Não foi possível gerar a versão vertical." });
+    try {
+      const audioBuffer = fs.readFileSync(audioPath);
+      const dgResponse = await fetch(
+        "https://api.deepgram.com/v1/listen?model=nova-2&language=pt&smart_format=true&utterances=true&punctuate=true",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${deepgramKey}`,
+            "Content-Type": "audio/mpeg",
+          },
+          body: audioBuffer,
         }
-        return;
+      );
+
+      if (!dgResponse.ok) {
+        const errText = await dgResponse.text();
+        console.error("Deepgram error", dgResponse.status, errText.slice(-2000));
+        cleanup(tmpDir);
+        return res.status(502).json({ error: "TRANSCRIBE_FAILED", message: "Falha ao transcrever o áudio." });
       }
-      streamFile(res, verticalPath, tmpDir, `clip-vertical-${videoId}-${s}-${e}.mp4`);
-    });
+
+      const dgData = await dgResponse.json();
+      const utterances = dgData?.results?.utterances || [];
+      const videoDurationSec = dgData?.metadata?.duration || 0;
+
+      const lines = utterances
+        .filter((u) => typeof u.transcript === "string" && u.transcript.trim())
+        .map((u) => {
+          const startSec = Math.floor(u.start);
+          const mm = String(Math.floor(startSec / 60)).padStart(2, "0");
+          const ss = String(startSec % 60).padStart(2, "0");
+          return {
+            time: `${mm}:${ss}`,
+            seconds: startSec,
+            text: u.transcript.trim(),
+            start: u.start,
+            duration: u.end - u.start,
+          };
+        });
+
+      cleanup(tmpDir);
+      res.json({ lines, videoDurationSec });
+    } catch (err) {
+      console.error("transcribe failed", err);
+      cleanup(tmpDir);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
+      }
+    }
   });
 });
 
