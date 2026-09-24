@@ -80,6 +80,54 @@ export const ViralMomentsService = {
     return { lines: data.lines as TranscriptLine[], videoDurationSec: data.videoDurationSec || 0 };
   },
 
+  // Enqueues a transcription job the VM itself picks up and processes on its
+  // own time — not bound by a Supabase Edge Function's 150s wall-clock
+  // limit, which a long podcast can easily exceed.
+  async enqueueTranscriptionJob(r2Key: string): Promise<string> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new ViralMomentsError("Sessão inválida.", "UNAUTHENTICATED");
+
+    const { data, error } = await supabase
+      .from("video_jobs")
+      .insert({ user_id: user.id, source: { r2Key } })
+      .select("id")
+      .single();
+    if (error) throw new ViralMomentsError(error.message, "INSERT_FAILED");
+    return data.id as string;
+  },
+
+  // Polls the job row until the VM marks it completed/failed.
+  async pollTranscriptionJob(
+    jobId: string,
+    onTick?: (elapsedMs: number) => void
+  ): Promise<TranscribeUploadResult> {
+    const intervalMs = 4000;
+    const timeoutMs = 30 * 60 * 1000; // 30 minutes — generous ceiling for very long videos
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const { data, error } = await supabase
+        .from("video_jobs")
+        .select("status, result, error_message")
+        .eq("id", jobId)
+        .single();
+      if (error) throw new ViralMomentsError(error.message, "QUERY_FAILED");
+
+      if (data.status === "completed") {
+        const result = data.result as TranscribeUploadResult;
+        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0 };
+      }
+      if (data.status === "failed") {
+        throw new ViralMomentsError(data.error_message || "Falha ao transcrever o vídeo.", "JOB_FAILED");
+      }
+
+      onTick?.(Date.now() - start);
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new ViralMomentsError("A transcrição demorou demais. Tente novamente.", "TIMEOUT");
+  },
+
   async findBestMoments(
     videoId: string,
     title: string,

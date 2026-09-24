@@ -255,8 +255,16 @@ function MelhoresMomentosPage() {
       if (manualLines.length > 0) {
         lines = manualLines;
       } else {
-        setLoadingStatus("Transcrevendo o áudio do vídeo...");
-        const transcript = await ViralMomentsService.transcribeUpload({ r2Key: key });
+        setLoadingStatus("Na fila de transcrição...");
+        const jobId = await ViralMomentsService.enqueueTranscriptionJob(key);
+        const transcript = await ViralMomentsService.pollTranscriptionJob(jobId, (elapsedMs) => {
+          const mins = Math.floor(elapsedMs / 60000);
+          setLoadingStatus(
+            mins > 0
+              ? `Transcrevendo o áudio do vídeo... (${mins} min — vídeos longos demoram mais)`
+              : "Transcrevendo o áudio do vídeo..."
+          );
+        });
         lines = transcript.lines;
       }
 

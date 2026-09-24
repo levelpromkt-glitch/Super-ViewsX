@@ -4,6 +4,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
 app.use(express.json());
@@ -223,6 +225,97 @@ app.post("/clip", (req, res) => {
   });
 });
 
+// Shared by the synchronous /transcribe endpoint and the async job worker.
+// Not bound by any Supabase Edge Function wall-clock limit — this runs
+// directly on the VM, so a 2-hour podcast is just as fine as a 5-minute one.
+function transcribeFromUrl(sourceUrl) {
+  return new Promise((resolve, reject) => {
+    const deepgramKey = process.env.DEEPGRAM_API_KEY;
+    if (!deepgramKey) {
+      reject({ code: "MISSING_CONFIG", message: "DEEPGRAM_API_KEY não configurada." });
+      return;
+    }
+
+    const jobId = crypto.randomBytes(8).toString("hex");
+    const tmpDir = path.join(os.tmpdir(), `transcribe-${jobId}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const audioPath = path.join(tmpDir, "audio.mp3");
+
+    // No timeout here on purpose: long source videos can genuinely take a
+    // while to read over the network, and the worker loop isn't held to any
+    // external wall-clock budget the way an Edge Function would be.
+    const ff = spawn("ffmpeg", [
+      "-y", "-i", sourceUrl,
+      "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k",
+      audioPath,
+    ]);
+
+    let ffStderr = "";
+    ff.stderr.on("data", (d) => { ffStderr += d.toString(); });
+    ff.on("error", (err) => {
+      cleanup(tmpDir);
+      reject({ code: "SPAWN_ERROR", message: err.message });
+    });
+    ff.on("close", async (code) => {
+      if (code !== 0 || !fs.existsSync(audioPath)) {
+        console.error("audio extraction failed", code, ffStderr.slice(-2000));
+        cleanup(tmpDir);
+        reject({ code: "AUDIO_EXTRACT_FAILED", message: "Não foi possível extrair o áudio do vídeo." });
+        return;
+      }
+
+      try {
+        const audioBuffer = fs.readFileSync(audioPath);
+        const dgResponse = await fetch(
+          "https://api.deepgram.com/v1/listen?model=nova-2&language=pt&smart_format=true&utterances=true&punctuate=true",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Token ${deepgramKey}`,
+              "Content-Type": "audio/mpeg",
+            },
+            body: audioBuffer,
+          }
+        );
+
+        if (!dgResponse.ok) {
+          const errText = await dgResponse.text();
+          console.error("Deepgram error", dgResponse.status, errText.slice(-2000));
+          cleanup(tmpDir);
+          reject({ code: "TRANSCRIBE_FAILED", message: "Falha ao transcrever o áudio." });
+          return;
+        }
+
+        const dgData = await dgResponse.json();
+        const utterances = dgData?.results?.utterances || [];
+        const videoDurationSec = dgData?.metadata?.duration || 0;
+
+        const lines = utterances
+          .filter((u) => typeof u.transcript === "string" && u.transcript.trim())
+          .map((u) => {
+            const startSec = Math.floor(u.start);
+            const mm = String(Math.floor(startSec / 60)).padStart(2, "0");
+            const ss = String(startSec % 60).padStart(2, "0");
+            return {
+              time: `${mm}:${ss}`,
+              seconds: startSec,
+              text: u.transcript.trim(),
+              start: u.start,
+              duration: u.end - u.start,
+            };
+          });
+
+        cleanup(tmpDir);
+        resolve({ lines, videoDurationSec });
+      } catch (err) {
+        console.error("transcribe failed", err);
+        cleanup(tmpDir);
+        reject({ code: "INTERNAL_ERROR", message: err.message });
+      }
+    });
+  });
+}
+
 app.post("/transcribe", (req, res) => {
   if (API_KEY && req.get("x-api-key") !== API_KEY) {
     return res.status(401).json({ error: "UNAUTHORIZED" });
@@ -233,91 +326,106 @@ app.post("/transcribe", (req, res) => {
     return res.status(400).json({ error: "INVALID_REQUEST", message: "sourceUrl é obrigatório." });
   }
 
-  const deepgramKey = process.env.DEEPGRAM_API_KEY;
-  if (!deepgramKey) {
-    return res.status(500).json({ error: "MISSING_CONFIG", message: "DEEPGRAM_API_KEY não configurada." });
-  }
-
-  const jobId = crypto.randomBytes(8).toString("hex");
-  const tmpDir = path.join(os.tmpdir(), `transcribe-${jobId}`);
-  fs.mkdirSync(tmpDir, { recursive: true });
-  const audioPath = path.join(tmpDir, "audio.mp3");
-
-  // Extract audio only: much smaller upload to Deepgram than the full video,
-  // and transcription quality doesn't need more than a modest bitrate.
-  const ff = spawn("ffmpeg", [
-    "-y", "-i", sourceUrl,
-    "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k",
-    audioPath,
-  ], { timeout: PROCESS_TIMEOUT_MS });
-
-  let ffStderr = "";
-  ff.stderr.on("data", (d) => { ffStderr += d.toString(); });
-  ff.on("error", (err) => {
-    cleanup(tmpDir);
-    if (!res.headersSent) res.status(500).json({ error: "SPAWN_ERROR", message: err.message });
-  });
-  ff.on("close", async (code) => {
-    if (code !== 0 || !fs.existsSync(audioPath)) {
-      console.error("audio extraction failed", code, ffStderr.slice(-2000));
-      cleanup(tmpDir);
-      if (!res.headersSent) {
-        res.status(502).json({ error: "AUDIO_EXTRACT_FAILED", message: "Não foi possível extrair o áudio do vídeo." });
-      }
-      return;
-    }
-
-    try {
-      const audioBuffer = fs.readFileSync(audioPath);
-      const dgResponse = await fetch(
-        "https://api.deepgram.com/v1/listen?model=nova-2&language=pt&smart_format=true&utterances=true&punctuate=true",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Token ${deepgramKey}`,
-            "Content-Type": "audio/mpeg",
-          },
-          body: audioBuffer,
-        }
-      );
-
-      if (!dgResponse.ok) {
-        const errText = await dgResponse.text();
-        console.error("Deepgram error", dgResponse.status, errText.slice(-2000));
-        cleanup(tmpDir);
-        return res.status(502).json({ error: "TRANSCRIBE_FAILED", message: "Falha ao transcrever o áudio." });
-      }
-
-      const dgData = await dgResponse.json();
-      const utterances = dgData?.results?.utterances || [];
-      const videoDurationSec = dgData?.metadata?.duration || 0;
-
-      const lines = utterances
-        .filter((u) => typeof u.transcript === "string" && u.transcript.trim())
-        .map((u) => {
-          const startSec = Math.floor(u.start);
-          const mm = String(Math.floor(startSec / 60)).padStart(2, "0");
-          const ss = String(startSec % 60).padStart(2, "0");
-          return {
-            time: `${mm}:${ss}`,
-            seconds: startSec,
-            text: u.transcript.trim(),
-            start: u.start,
-            duration: u.end - u.start,
-          };
-        });
-
-      cleanup(tmpDir);
-      res.json({ lines, videoDurationSec });
-    } catch (err) {
-      console.error("transcribe failed", err);
-      cleanup(tmpDir);
-      if (!res.headersSent) {
-        res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
-      }
-    }
-  });
+  transcribeFromUrl(sourceUrl)
+    .then((result) => res.json(result))
+    .catch((err) => res.status(502).json({ error: err.code || "TRANSCRIBE_FAILED", message: err.message }));
 });
+
+// --- Async job worker -------------------------------------------------
+// Polls Supabase directly for pending video_jobs (transcription requests
+// too large/slow to fit inside a Supabase Edge Function's 150s wall-clock
+// limit) and processes them with no such ceiling. The VM is the client here
+// — it calls out to Supabase, not the other way around, so nothing about
+// this loop is bound by Edge Function limits.
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const JOB_POLL_INTERVAL_MS = 8000;
+
+async function claimNextVideoJob() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/claim_next_video_job`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  if (!res.ok) {
+    console.error("claim_next_video_job failed", res.status, await res.text().catch(() => ""));
+    return null;
+  }
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function markVideoJob(id, patch) {
+  await fetch(`${SUPABASE_URL}/rest/v1/video_jobs?id=eq.${id}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+  }).catch((err) => console.error("markVideoJob failed", err));
+}
+
+// The VM is a single CPU core: process one queued job at a time rather than
+// letting overlapping poll ticks kick off several ffmpeg/Deepgram jobs at once.
+let isProcessingVideoJob = false;
+
+async function pollVideoJobs() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || isProcessingVideoJob) return;
+  isProcessingVideoJob = true;
+  try {
+    const job = await claimNextVideoJob();
+    if (!job) return;
+
+    console.log("processing video_job", job.id);
+    try {
+      const sourceUrl = await resolveJobSourceUrl(job.source);
+      const result = await transcribeFromUrl(sourceUrl);
+      await markVideoJob(job.id, { status: "completed", result });
+      console.log("video_job completed", job.id);
+    } catch (err) {
+      console.error("video_job failed", job.id, err);
+      await markVideoJob(job.id, {
+        status: "failed",
+        error_message: (err && err.message) || "Erro ao processar o vídeo.",
+      });
+    }
+  } catch (err) {
+    console.error("pollVideoJobs error", err);
+  } finally {
+    isProcessingVideoJob = false;
+  }
+}
+
+// The job's `source` is either a public/already-signed URL, or an R2 key
+// that needs its own presigned GET URL minted right before use (so it's
+// always fresh regardless of how long the job sat in the queue).
+async function resolveJobSourceUrl(source) {
+  if (source && typeof source.sourceUrl === "string") return source.sourceUrl;
+  if (source && typeof source.r2Key === "string") return getR2SignedGetUrl(source.r2Key);
+  throw { code: "INVALID_REQUEST", message: "Job sem origem de vídeo válida." };
+}
+
+function getR2SignedGetUrl(key) {
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  });
+  const command = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key });
+  return getSignedUrl(s3, command, { expiresIn: 3600 });
+}
+
+setInterval(pollVideoJobs, JOB_POLL_INTERVAL_MS);
 
 function streamFile(res, filePath, tmpDir, filename) {
   res.setHeader("Content-Type", "video/mp4");
