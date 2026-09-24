@@ -80,10 +80,18 @@ app.post("/clip", (req, res) => {
   // clip, which reliably OOM-kills on Railway's free-tier memory limit. A
   // plain stream copy just snaps to the nearest keyframe (video may start/end
   // a couple seconds off) but needs a fraction of the memory.
+  //
+  // Capped at 720p (not 1080p): the VM is a single-core, ~1GB-RAM box, and
+  // every byte here also goes through the proxy pool. TikTok/Reels/Shorts
+  // re-compress on upload anyway, so 1080p bought nothing but slower
+  // downloads. --concurrent-fragments overlaps the segment requests instead
+  // of fetching them one at a time, which is most of the wall-clock time
+  // when every request already has extra proxy round-trip latency.
   const args = [
     "--no-playlist",
+    "--concurrent-fragments", "4",
     "--download-sections", `*${s}-${e}`,
-    "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/best[height<=1080]",
+    "-f", "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/best[height<=720]",
     "--merge-output-format", "mp4",
     "-o", outputTemplate,
   ];
