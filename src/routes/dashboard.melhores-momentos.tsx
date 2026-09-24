@@ -496,22 +496,6 @@ function MelhoresMomentosPage() {
                           </>
                         )}
                       </button>
-                      <button
-                        className="hs-btn-ghost"
-                        onClick={() => handleDownload(m, true)}
-                        disabled={downloadingId === `${m.id}-vertical`}
-                        title="Recorte 9:16 centrado no rosto de quem está falando"
-                      >
-                        {downloadingId === `${m.id}-vertical` ? (
-                          <>
-                            <Loader2 size={12} className="tr-spin" /> Gerando vertical...
-                          </>
-                        ) : (
-                          <>
-                            <Download size={12} /> Baixar vertical
-                          </>
-                        )}
-                      </button>
                       <a
                         className="hs-btn-ghost"
                         href={`https://www.youtube.com/watch?v=${videoId}&t=${effectiveStart}s`}
