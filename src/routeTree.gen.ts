@@ -15,7 +15,9 @@ import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
+import { Route as DashboardBibliotecaRouteImport } from './routes/dashboard.biblioteca'
 import { Route as DashboardConfiguracoesRouteImport } from './routes/dashboard.configuracoes'
+import { Route as DashboardEditorRouteImport } from './routes/dashboard.editor'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
 import { Route as DashboardPlanosRouteImport } from './routes/dashboard.planos'
@@ -55,9 +57,19 @@ const DashboardAdminRoute = DashboardAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardBibliotecaRoute = DashboardBibliotecaRouteImport.update({
+  id: '/biblioteca',
+  path: '/biblioteca',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardConfiguracoesRoute = DashboardConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardEditorRoute = DashboardEditorRouteImport.update({
+  id: '/editor',
+  path: '/editor',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardHashtagRoute = DashboardHashtagRouteImport.update({
@@ -109,7 +121,9 @@ export interface FileRoutesByFullPath {
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -125,7 +139,9 @@ export interface FileRoutesByTo {
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -143,7 +159,9 @@ export interface FileRoutesById {
   '/privacidade': typeof PrivacidadeRoute
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
   '/dashboard/planos': typeof DashboardPlanosRoute
@@ -162,7 +180,9 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -178,7 +198,9 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -195,7 +217,9 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/termos'
     | '/dashboard/admin'
+    | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
     | '/dashboard/planos'
@@ -258,11 +282,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAdminRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/biblioteca': {
+      id: '/dashboard/biblioteca'
+      path: '/biblioteca'
+      fullPath: '/dashboard/biblioteca'
+      preLoaderRoute: typeof DashboardBibliotecaRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/configuracoes': {
       id: '/dashboard/configuracoes'
       path: '/configuracoes'
       fullPath: '/dashboard/configuracoes'
       preLoaderRoute: typeof DashboardConfiguracoesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/editor': {
+      id: '/dashboard/editor'
+      path: '/editor'
+      fullPath: '/dashboard/editor'
+      preLoaderRoute: typeof DashboardEditorRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/hashtag': {
@@ -341,7 +379,9 @@ const DashboardConfiguracoesRouteWithChildren =
 
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
+  DashboardBibliotecaRoute: typeof DashboardBibliotecaRoute
   DashboardConfiguracoesRoute: typeof DashboardConfiguracoesRouteWithChildren
+  DashboardEditorRoute: typeof DashboardEditorRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
   DashboardPlanosRoute: typeof DashboardPlanosRoute
@@ -354,7 +394,9 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
+  DashboardBibliotecaRoute: DashboardBibliotecaRoute,
   DashboardConfiguracoesRoute: DashboardConfiguracoesRouteWithChildren,
+  DashboardEditorRoute: DashboardEditorRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,
   DashboardPlanosRoute: DashboardPlanosRoute,

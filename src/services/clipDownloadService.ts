@@ -10,14 +10,10 @@ export class ClipDownloadError extends Error {
 export type ClipSource = { videoId: string } | { storagePath: string } | { r2Key: string };
 
 export const ClipDownloadService = {
-  async downloadClip(
-    source: ClipSource,
-    start: number,
-    end: number,
-    filename: string,
-    vertical = false,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  // Cuts the clip via the VM and returns its R2 download URL — the reusable
+  // piece behind both downloadClip() below and the Editor page, which needs
+  // the URL itself (to feed the caption renderer) rather than a saved file.
+  async getClipDownloadUrl(source: ClipSource, start: number, end: number, vertical = false): Promise<string> {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -49,8 +45,20 @@ export const ClipDownloadService = {
     if (!response.ok || !payload?.success || !payload?.downloadUrl) {
       throw new ClipDownloadError(payload?.message || "Não foi possível gerar o corte do vídeo.", payload?.code || "CLIP_FAILED");
     }
+    return payload.downloadUrl as string;
+  },
 
-    const fileResponse = await fetch(payload.downloadUrl);
+  async downloadClip(
+    source: ClipSource,
+    start: number,
+    end: number,
+    filename: string,
+    vertical = false,
+    onProgress?: (percent: number) => void
+  ): Promise<void> {
+    const downloadUrl = await this.getClipDownloadUrl(source, start, end, vertical);
+
+    const fileResponse = await fetch(downloadUrl);
     if (!fileResponse.ok || !fileResponse.body) {
       throw new ClipDownloadError("Não foi possível baixar o corte gerado.", "DOWNLOAD_FAILED");
     }

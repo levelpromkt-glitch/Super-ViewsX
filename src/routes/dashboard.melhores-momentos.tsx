@@ -9,6 +9,7 @@ import {
   Clock,
   Download,
   Flame,
+  Heart,
   Link2,
   Loader2,
   Play,
@@ -28,6 +29,7 @@ import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, Na
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError, ConnectedAccount } from "@/services/socialAccountsService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
+import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -203,6 +205,8 @@ function MelhoresMomentosPage() {
   const getEffectiveTitle = (m: ViralMoment) => m.titles[selectedTitle[m.id] ?? 0] ?? m.title;
 
   const [tiktokAccounts, setTiktokAccounts] = useState<ConnectedAccount[] | null>(null);
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [likingId, setLikingId] = useState<string | null>(null);
   const [publishTarget, setPublishTarget] = useState<ViralMoment | null>(null);
   const [publishAccountId, setPublishAccountId] = useState<string>("");
   const [captionDraft, setCaptionDraft] = useState("");
@@ -370,6 +374,27 @@ function MelhoresMomentosPage() {
         delete next[downloadId];
         return next;
       });
+    }
+  };
+
+  const handleLike = async (m: ViralMoment) => {
+    if (!clipSource || likedIds.has(m.id)) return;
+    setLikingId(m.id);
+    try {
+      await SavedClipsService.save({
+        source: clipSource,
+        start: getEffectiveStart(m),
+        end: m.end,
+        title: getEffectiveTitle(m),
+        profile: m.profile,
+        score: m.score,
+        thumbnail: momentThumbnails[m.id] || null,
+      });
+      setLikedIds((prev) => new Set(prev).add(m.id));
+    } catch (error: any) {
+      setDownloadError(error instanceof SavedClipsError ? error.message : "Erro ao salvar na biblioteca.");
+    } finally {
+      setLikingId(null);
     }
   };
 
@@ -786,6 +811,19 @@ function MelhoresMomentosPage() {
                     <div className="hs-card-actions">
                       <button className="hs-btn-ghost" onClick={() => setActiveMoment(m)}>
                         <Play size={12} /> Assistir trecho
+                      </button>
+                      <button
+                        className="hs-btn-ghost"
+                        onClick={() => handleLike(m)}
+                        disabled={likingId === m.id || likedIds.has(m.id)}
+                        style={likedIds.has(m.id) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
+                      >
+                        {likingId === m.id ? (
+                          <Loader2 size={12} className="tr-spin" />
+                        ) : (
+                          <Heart size={12} fill={likedIds.has(m.id) ? "currentColor" : "none"} />
+                        )}
+                        {likedIds.has(m.id) ? "Salvo" : "Salvar"}
                       </button>
                       <button
                         className="hs-btn-ghost"

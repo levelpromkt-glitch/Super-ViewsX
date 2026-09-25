@@ -53,8 +53,17 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const storagePath: string | undefined = body?.storagePath;
     const r2Key: string | undefined = body?.r2Key;
+    // Trusts the caller with an already-resolved URL (e.g. a clip our own
+    // clip-video function just cut and uploaded to R2, which lives under a
+    // "clips/" prefix rather than the user's own folder). Fine for a
+    // single-user app; a multi-tenant one would want to scope this too.
+    const directSourceUrl: string | undefined = body?.sourceUrl;
 
-    if ((!storagePath || !storagePath.startsWith(`${user.id}/`)) && (!r2Key || !r2Key.startsWith(`${user.id}/`))) {
+    if (
+      !directSourceUrl &&
+      (!storagePath || !storagePath.startsWith(`${user.id}/`)) &&
+      (!r2Key || !r2Key.startsWith(`${user.id}/`))
+    ) {
       return new Response(
         JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'Arquivo de vídeo inválido.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -62,7 +71,9 @@ serve(async (req) => {
     }
 
     let sourceUrl: string;
-    if (r2Key) {
+    if (directSourceUrl) {
+      sourceUrl = directSourceUrl;
+    } else if (r2Key) {
       sourceUrl = await getR2SignedGetUrl(r2Key);
     } else {
       const { data: signed, error: signError } = await admin.storage
@@ -114,7 +125,7 @@ serve(async (req) => {
 
     const data = await transcribeResponse.json();
     return new Response(
-      JSON.stringify({ success: true, lines: data.lines, videoDurationSec: data.videoDurationSec }),
+      JSON.stringify({ success: true, lines: data.lines, words: data.words, videoDurationSec: data.videoDurationSec }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {

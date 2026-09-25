@@ -403,6 +403,17 @@ function transcribeFromUrl(sourceUrl) {
         const utterances = dgData?.results?.utterances || [];
         const videoDurationSec = dgData?.metadata?.duration || 0;
 
+        // Word-level timing (separate from the phrase-level "lines" below) —
+        // needed for word-by-word karaoke captions, which "lines" can't drive.
+        const rawWords = dgData?.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+        const words = rawWords
+          .filter((w) => typeof (w.punctuated_word || w.word) === "string")
+          .map((w) => ({
+            word: (w.punctuated_word || w.word).toUpperCase(),
+            start: w.start,
+            end: w.end,
+          }));
+
         const lines = utterances
           .filter((u) => typeof u.transcript === "string" && u.transcript.trim())
           .map((u) => {
@@ -432,7 +443,7 @@ function transcribeFromUrl(sourceUrl) {
         }
 
         cleanup(tmpDir);
-        resolve({ lines, videoDurationSec, audioSignals });
+        resolve({ lines, words, videoDurationSec, audioSignals });
       } catch (err) {
         console.error("transcribe failed", err);
         cleanup(tmpDir);
@@ -529,6 +540,93 @@ async function pollVideoJobs() {
   }
 }
 
+// --- Caption render jobs (HyperFrames on Modal) ------------------------
+// The actual rendering (headless Chrome) runs on Modal, not here — this VM
+// only polls Modal for completion and, once done, copies the result from
+// Modal's own storage into our R2 (so the app always hands the client an R2
+// signed URL, consistent with every other download, and never needs the
+// Modal API key). Lightweight network calls, not CPU work, so no single-job
+// lock like pollVideoJobs — a few can be in flight per tick.
+const MODAL_RENDER_URL = process.env.MODAL_RENDER_URL;
+const MODAL_RENDER_API_KEY = process.env.MODAL_RENDER_API_KEY;
+
+async function markCaptionJob(id, patch) {
+  await fetch(`${SUPABASE_URL}/rest/v1/caption_jobs?id=eq.${id}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+  }).catch((err) => console.error("markCaptionJob failed", err));
+}
+
+async function pollCaptionJobs() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !MODAL_RENDER_URL || !MODAL_RENDER_API_KEY) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/caption_jobs?status=eq.processing&select=id,modal_call_id&limit=5`,
+      {
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      }
+    );
+    const jobs = await res.json().catch(() => []);
+    if (!Array.isArray(jobs) || jobs.length === 0) return;
+
+    await Promise.all(jobs.map(checkCaptionJob));
+  } catch (err) {
+    console.error("pollCaptionJobs error", err);
+  }
+}
+
+async function checkCaptionJob(job) {
+  try {
+    const statusRes = await fetch(`${MODAL_RENDER_URL.replace(/\/$/, "")}/api/render/${job.modal_call_id}`, {
+      headers: { "X-Render-Key": MODAL_RENDER_API_KEY },
+    });
+
+    if (statusRes.status === 202) return; // still rendering
+
+    if (!statusRes.ok) {
+      const errText = await statusRes.text().catch(() => "");
+      await markCaptionJob(job.id, { status: "failed", error_message: `Render falhou: ${errText.slice(0, 300)}` });
+      return;
+    }
+
+    const data = await statusRes.json();
+    if (data.status !== "done") return;
+
+    const fileRes = await fetch(`${MODAL_RENDER_URL.replace(/\/$/, "")}${data.url}`, {
+      headers: { "X-Render-Key": MODAL_RENDER_API_KEY },
+    });
+    if (!fileRes.ok) {
+      await markCaptionJob(job.id, { status: "failed", error_message: "Não foi possível baixar o vídeo renderizado." });
+      return;
+    }
+
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    const key = `captions/${crypto.randomBytes(8).toString("hex")}.mp4`;
+    const s3 = getR2Client();
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: "video/mp4",
+    }));
+    const downloadUrl = await getR2SignedGetUrl(key);
+
+    await markCaptionJob(job.id, { status: "completed", result: { downloadUrl } });
+    console.log("caption_job completed", job.id);
+  } catch (err) {
+    console.error("checkCaptionJob failed", job.id, err);
+  }
+}
+
 // The job's `source` is either a public/already-signed URL, or an R2 key
 // that needs its own presigned GET URL minted right before use (so it's
 // always fresh regardless of how long the job sat in the queue).
@@ -545,5 +643,6 @@ function getR2SignedGetUrl(key) {
 }
 
 setInterval(pollVideoJobs, JOB_POLL_INTERVAL_MS);
+setInterval(pollCaptionJobs, JOB_POLL_INTERVAL_MS);
 
 app.listen(PORT, () => console.log(`Clip service listening on port ${PORT}`));
