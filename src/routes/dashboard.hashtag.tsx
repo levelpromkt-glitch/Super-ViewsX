@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { SavedReferencesService } from "@/services/savedReferencesService";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -66,6 +67,14 @@ function HashtagPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [periodOpen, setPeriodOpen] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    SavedReferencesService.list()
+      .then((refs) => setSavedIds(new Set(refs.map((r) => `${r.platform}:${r.external_id}`))))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!periodOpen) return;
@@ -177,6 +186,30 @@ function HashtagPage() {
       setError(err.message || "Erro ao carregar mais vídeos.");
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const handleSaveReference = async (v: any) => {
+    const key = `${v.platform}:${v.id}`;
+    if (savedIds.has(key)) return;
+    setSavingId(key);
+    try {
+      await SavedReferencesService.save({
+        platform: v.platform,
+        externalId: v.id,
+        title: v.title,
+        url: v.url,
+        thumbnail: v.thumbnail || null,
+        views: v.views ?? null,
+        likes: v.likes ?? null,
+        comments: v.comments ?? null,
+        hashtag: lastQuery?.tag || null,
+      });
+      setSavedIds((prev) => new Set(prev).add(key));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -403,6 +436,19 @@ function HashtagPage() {
                       <span className="hs-card-tag">{v.hashtags && v.hashtags[0] ? v.hashtags[0] : ""}</span>
                     </div>
                     <div className="hs-card-actions">
+                      <button
+                        className="hs-btn-ghost"
+                        onClick={() => handleSaveReference(v)}
+                        disabled={savingId === `${v.platform}:${v.id}` || savedIds.has(`${v.platform}:${v.id}`)}
+                        style={savedIds.has(`${v.platform}:${v.id}`) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
+                      >
+                        {savingId === `${v.platform}:${v.id}` ? (
+                          <Loader2 size={12} className="hs-spin" />
+                        ) : (
+                          <Heart size={12} fill={savedIds.has(`${v.platform}:${v.id}`) ? "currentColor" : "none"} />
+                        )}
+                        {savedIds.has(`${v.platform}:${v.id}`) ? "Salvo" : "Salvar"}
+                      </button>
                       <a
                          className="hs-btn-ghost"
                          href={v.url}
