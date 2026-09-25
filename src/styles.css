@@ -494,7 +494,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .ps-segment button { border: none; background: transparent; color: var(--text-muted); font-size: .8rem; font-weight: 600; padding: 7px 15px; border-radius: 999px; cursor: pointer; font-family: inherit; transition: all .2s ease; white-space: nowrap; }
 .ps-segment button.active { background: var(--primary-lime); color: #050805; }
 .ps-toolbar-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.ps-select { background: rgba(255,255,255,.02); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 12px; color: var(--text-main); font-size: .85rem; font-family: inherit; max-width: 220px; }
+.ps-select { background: rgba(255,255,255,.02); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 12px; color: var(--text-main); font-size: .85rem; font-family: inherit; max-width: 220px; color-scheme: dark; }
+.ps-select option { background: #0F140F; color: var(--text-main); }
 .ps-refresh { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border-soft); background: rgba(255,255,255,.02); color: var(--text-secondary); font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap; }
 .ps-refresh:hover { border-color: var(--border-hover); color: var(--text-main); }
 .ps-refresh:disabled { opacity: .6; cursor: default; }
