@@ -75,4 +75,44 @@ export const SocialAccountsService = {
     }
     return data.publishId as string;
   },
+
+  async getYoutubeAuthorizeUrl(): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("youtube-oauth-start", { body: {} });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao iniciar conexão com o YouTube.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao iniciar conexão com o YouTube.", "UNKNOWN_ERROR");
+    }
+    return data.authorizeUrl as string;
+  },
+
+  async completeYoutubeOAuth(code: string, state: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("youtube-oauth-callback", {
+      body: { code, state },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao concluir a conexão com o YouTube.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao concluir a conexão com o YouTube.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.platformUsername as string;
+  },
+
+  async publishToYoutube(accountId: string, videoId: string, start: number, end: number, caption: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("youtube-publish", {
+      body: { accountId, videoId, start, end, caption },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no YouTube.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao publicar no YouTube.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.videoId as string;
+  },
 };

@@ -21,7 +21,7 @@ const PLATFORMS: {
   available: boolean;
 }[] = [
   { id: "tiktok", label: "TikTok", logo: "/tiktok-logo.png", available: true },
-  { id: "youtube", label: "YouTube", logo: "/youtube-logo.png", available: false },
+  { id: "youtube", label: "YouTube", logo: "/youtube-logo.png", available: true },
   { id: "instagram", label: "Instagram", icon: Camera, available: false },
 ];
 
@@ -136,22 +136,29 @@ function ConfiguracoesPage() {
     loadAccounts();
 
     const params = new URLSearchParams(window.location.search);
-    const tiktokStatus = params.get("tiktok");
-    if (tiktokStatus === "connected") {
-      setBanner({ type: "success", text: "Conta do TikTok conectada com sucesso!" });
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (tiktokStatus === "error") {
-      setBanner({ type: "error", text: params.get("message") || "Não foi possível conectar sua conta do TikTok." });
-      window.history.replaceState({}, "", window.location.pathname);
+    for (const [platform, label] of [["tiktok", "TikTok"], ["youtube", "YouTube"]] as const) {
+      const status = params.get(platform);
+      if (status === "connected") {
+        setBanner({ type: "success", text: `Conta do ${label} conectada com sucesso!` });
+        window.history.replaceState({}, "", window.location.pathname);
+      } else if (status === "error") {
+        setBanner({ type: "error", text: params.get("message") || `Não foi possível conectar sua conta do ${label}.` });
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     }
   }, []);
 
   const handleConnect = async (platform: SocialPlatform) => {
-    if (platform !== "tiktok") return;
     setError(null);
     setConnectingPlatform(platform);
     try {
-      const authorizeUrl = await SocialAccountsService.getTikTokAuthorizeUrl();
+      const authorizeUrl =
+        platform === "tiktok"
+          ? await SocialAccountsService.getTikTokAuthorizeUrl()
+          : platform === "youtube"
+            ? await SocialAccountsService.getYoutubeAuthorizeUrl()
+            : null;
+      if (!authorizeUrl) return;
       window.location.href = authorizeUrl;
     } catch (err: any) {
       setError(err instanceof SocialAccountsError ? err.message : "Erro ao iniciar conexão.");

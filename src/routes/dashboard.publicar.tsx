@@ -32,8 +32,9 @@ function formatDateTime(iso: string) {
 }
 
 function PublicarPage() {
-  const [tiktokAccounts, setTiktokAccounts] = useState<ConnectedAccount[] | null>(null);
+  const [accounts, setAccounts] = useState<ConnectedAccount[] | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) || null;
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [mode, setMode] = useState<"now" | "schedule">("now");
@@ -56,12 +57,12 @@ function PublicarPage() {
 
   useEffect(() => {
     SocialAccountsService.listConnected()
-      .then((accounts) => {
-        const tiktok = accounts.filter((a) => a.platform === "tiktok");
-        setTiktokAccounts(tiktok);
-        if (tiktok.length > 0) setSelectedAccountId(tiktok[0].id);
+      .then((all) => {
+        const publishable = all.filter((a) => a.platform === "tiktok" || a.platform === "youtube");
+        setAccounts(publishable);
+        if (publishable.length > 0) setSelectedAccountId(publishable[0].id);
       })
-      .catch(() => setTiktokAccounts([]));
+      .catch(() => setAccounts([]));
     loadPosts();
   }, []);
 
@@ -80,8 +81,8 @@ function PublicarPage() {
       setFormError("Escolha um vídeo do seu computador.");
       return;
     }
-    if (!selectedAccountId) {
-      setFormError("Escolha em qual conta do TikTok publicar.");
+    if (!selectedAccountId || !selectedAccount) {
+      setFormError("Escolha em qual conta publicar.");
       return;
     }
     if (mode === "schedule" && !scheduledAt) {
@@ -99,12 +100,14 @@ function PublicarPage() {
       setSubmitStatus("Enviando vídeo...");
       const storagePath = await PostsService.uploadVideo(file);
 
+      const platform = selectedAccount!.platform;
+      const platformLabel = platform === "youtube" ? "YouTube" : "TikTok";
       if (mode === "now") {
-        setSubmitStatus("Publicando no TikTok...");
-        await PostsService.publishNow(selectedAccountId, storagePath, caption);
-        setFormSuccess("Vídeo publicado no TikTok!");
+        setSubmitStatus(`Publicando no ${platformLabel}...`);
+        await PostsService.publishNow(platform, selectedAccountId, storagePath, caption);
+        setFormSuccess(`Vídeo publicado no ${platformLabel}!`);
       } else {
-        await PostsService.schedulePost(selectedAccountId, storagePath, caption, scheduledDate!);
+        await PostsService.schedulePost(platform, selectedAccountId, storagePath, caption, scheduledDate!);
         setFormSuccess("Post agendado com sucesso!");
       }
 
@@ -144,17 +147,17 @@ function PublicarPage() {
           </p>
         </div>
 
-        {tiktokAccounts !== null && tiktokAccounts.length === 0 && (
+        {accounts !== null && accounts.length === 0 && (
           <div className="tr-error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <AlertCircle size={14} />
-            Conecte uma conta do TikTok antes de publicar.{" "}
+            Conecte uma conta do TikTok ou YouTube antes de publicar.{" "}
             <Link to="/dashboard/configuracoes" style={{ color: "var(--primary-lime)", marginLeft: 4 }}>
               Conectar agora
             </Link>
           </div>
         )}
 
-        {tiktokAccounts !== null && tiktokAccounts.length > 1 && (
+        {accounts !== null && accounts.length > 1 && (
           <div className="tr-field">
             <label className="hs-label">Publicar como</label>
             <select
@@ -162,9 +165,9 @@ function PublicarPage() {
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
             >
-              {tiktokAccounts.map((a) => (
+              {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.label || a.platform_username} (TikTok)
+                  {a.label || a.platform_username} ({a.platform === "youtube" ? "YouTube" : "TikTok"})
                 </option>
               ))}
             </select>

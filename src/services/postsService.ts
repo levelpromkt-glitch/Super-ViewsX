@@ -51,27 +51,28 @@ export const PostsService = {
     return path;
   },
 
-  async publishNow(accountId: string, storagePath: string, caption: string): Promise<string> {
-    const { data, error } = await supabase.functions.invoke("tiktok-publish-upload", {
+  async publishNow(platform: SocialPlatform, accountId: string, storagePath: string, caption: string): Promise<string> {
+    const functionName = platform === "youtube" ? "youtube-publish" : "tiktok-publish-upload";
+    const { data, error } = await supabase.functions.invoke(functionName, {
       body: { accountId, storagePath, caption },
     });
     if (error) {
-      const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no TikTok.");
+      const message = await readEdgeFunctionErrorMessage(error, `Erro ao publicar no ${platform}.`);
       throw new PostsError(message, "FUNCTION_ERROR");
     }
     if (!data?.success) {
-      throw new PostsError(data?.message || "Erro ao publicar no TikTok.", data?.code || "UNKNOWN_ERROR");
+      throw new PostsError(data?.message || `Erro ao publicar no ${platform}.`, data?.code || "UNKNOWN_ERROR");
     }
-    return data.publishId as string;
+    return (data.publishId || data.videoId) as string;
   },
 
-  async schedulePost(accountId: string, storagePath: string, caption: string, scheduledAt: Date): Promise<void> {
+  async schedulePost(platform: SocialPlatform, accountId: string, storagePath: string, caption: string, scheduledAt: Date): Promise<void> {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) throw new PostsError("Sessão inválida.", "UNAUTHENTICATED");
 
     const { error } = await supabase.from("scheduled_posts").insert({
       user_id: user.id,
-      platform: "tiktok",
+      platform,
       account_id: accountId,
       video_url: storagePath,
       caption,

@@ -16,6 +16,8 @@ serve(async (req) => {
 
   const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY');
   const clientSecret = Deno.env.get('TIKTOK_CLIENT_SECRET');
+  const googleClientId = Deno.env.get('YOUTUBE_CLIENT_ID');
+  const googleClientSecret = Deno.env.get('YOUTUBE_CLIENT_SECRET');
 
   const { data: duePosts, error } = await admin
     .from('scheduled_posts')
@@ -43,7 +45,7 @@ serve(async (req) => {
     if (!claimed) continue;
 
     try {
-      if (post.platform !== 'tiktok') {
+      if (post.platform !== 'tiktok' && post.platform !== 'youtube') {
         await admin.from('scheduled_posts').update({
           status: 'failed',
           error_message: `Plataforma ${post.platform} ainda não suportada.`,
@@ -54,40 +56,16 @@ serve(async (req) => {
       }
 
       // Older rows created before multi-account support may not have
-      // account_id set — fall back to "the" TikTok account for those, same
-      // as the old single-account behavior. New rows always carry account_id.
-      const accountQuery = admin.from('social_accounts').select('*').eq('user_id', post.user_id).eq('platform', 'tiktok');
+      // account_id set — fall back to "the" account for this platform in
+      // those cases, same as the old single-account behavior. New rows
+      // always carry account_id.
+      const accountQuery = admin.from('social_accounts').select('*').eq('user_id', post.user_id).eq('platform', post.platform);
       const { data: account } = post.account_id
         ? await accountQuery.eq('id', post.account_id).single()
         : await accountQuery.limit(1).maybeSingle();
 
       if (!account) {
-        throw new Error('Conta do TikTok não está mais conectada.');
-      }
-
-      let accessToken: string = account.access_token;
-      const expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
-      if (clientKey && clientSecret && expiresAt < Date.now() + 60_000) {
-        const refreshResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
-          body: new URLSearchParams({
-            client_key: clientKey,
-            client_secret: clientSecret,
-            grant_type: 'refresh_token',
-            refresh_token: account.refresh_token || '',
-          }),
-        });
-        const refreshData = await refreshResponse.json();
-        if (refreshResponse.ok && refreshData.access_token) {
-          accessToken = refreshData.access_token;
-          await admin.from('social_accounts').update({
-            access_token: refreshData.access_token,
-            refresh_token: refreshData.refresh_token || account.refresh_token,
-            token_expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          }).eq('id', account.id);
-        }
+        throw new Error(`Conta do ${post.platform} não está mais conectada.`);
       }
 
       const { data: fileBlob, error: downloadError } = await admin.storage.from('post-videos').download(post.video_url);
@@ -97,63 +75,148 @@ serve(async (req) => {
       const videoBuffer = new Uint8Array(await fileBlob.arrayBuffer());
       const videoSize = videoBuffer.byteLength;
 
-      let privacyLevel = 'SELF_ONLY';
-      try {
-        const creatorInfoResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
+      let publishedId: string;
+
+      if (post.platform === 'tiktok') {
+        let accessToken: string = account.access_token;
+        const expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
+        if (clientKey && clientSecret && expiresAt < Date.now() + 60_000) {
+          const refreshResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
+            body: new URLSearchParams({
+              client_key: clientKey,
+              client_secret: clientSecret,
+              grant_type: 'refresh_token',
+              refresh_token: account.refresh_token || '',
+            }),
+          });
+          const refreshData = await refreshResponse.json();
+          if (refreshResponse.ok && refreshData.access_token) {
+            accessToken = refreshData.access_token;
+            await admin.from('social_accounts').update({
+              access_token: refreshData.access_token,
+              refresh_token: refreshData.refresh_token || account.refresh_token,
+              token_expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq('id', account.id);
+          }
+        }
+
+        let privacyLevel = 'SELF_ONLY';
+        try {
+          const creatorInfoResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          });
+          const creatorInfo = await creatorInfoResponse.json();
+          const options: string[] = creatorInfo?.data?.privacy_level_options || [];
+          if (options.length > 0 && !options.includes(privacyLevel)) {
+            privacyLevel = options[0];
+          }
+        } catch (e) {
+          console.error('creator_info query failed', e);
+        }
+
+        const initResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            post_info: {
+              title: post.caption || '',
+              privacy_level: privacyLevel,
+              disable_duet: false,
+              disable_comment: false,
+              disable_stitch: false,
+            },
+            source_info: {
+              source: 'FILE_UPLOAD',
+              video_size: videoSize,
+              chunk_size: videoSize,
+              total_chunk_count: 1,
+            },
+          }),
         });
-        const creatorInfo = await creatorInfoResponse.json();
-        const options: string[] = creatorInfo?.data?.privacy_level_options || [];
-        if (options.length > 0 && !options.includes(privacyLevel)) {
-          privacyLevel = options[0];
+        const initData = await initResponse.json();
+        if (!initResponse.ok || initData.error?.code !== 'ok') {
+          throw new Error(initData?.error?.message || 'O TikTok recusou o início da publicação.');
         }
-      } catch (e) {
-        console.error('creator_info query failed', e);
-      }
 
-      const initResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          post_info: {
-            title: post.caption || '',
-            privacy_level: privacyLevel,
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false,
+        const uploadUrl: string = initData.data.upload_url;
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`,
           },
-          source_info: {
-            source: 'FILE_UPLOAD',
-            video_size: videoSize,
-            chunk_size: videoSize,
-            total_chunk_count: 1,
-          },
-        }),
-      });
-      const initData = await initResponse.json();
-      if (!initResponse.ok || initData.error?.code !== 'ok') {
-        throw new Error(initData?.error?.message || 'O TikTok recusou o início da publicação.');
-      }
+          body: videoBuffer,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error('Falha ao enviar o vídeo para o TikTok.');
+        }
+        publishedId = initData.data.publish_id;
+      } else {
+        // youtube
+        let accessToken: string = account.access_token;
+        const expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
+        if (googleClientId && googleClientSecret && expiresAt < Date.now() + 60_000) {
+          const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: googleClientId,
+              client_secret: googleClientSecret,
+              grant_type: 'refresh_token',
+              refresh_token: account.refresh_token || '',
+            }),
+          });
+          const refreshData = await refreshResponse.json();
+          if (refreshResponse.ok && refreshData.access_token) {
+            accessToken = refreshData.access_token;
+            await admin.from('social_accounts').update({
+              access_token: refreshData.access_token,
+              token_expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq('id', account.id);
+          }
+        }
 
-      const publishId: string = initData.data.publish_id;
-      const uploadUrl: string = initData.data.upload_url;
+        const initResponse = await fetch(
+          'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json; charset=UTF-8',
+              'X-Upload-Content-Type': 'video/mp4',
+              'X-Upload-Content-Length': String(videoSize),
+            },
+            body: JSON.stringify({
+              snippet: { title: post.caption || 'Corte Super Views X', description: `${post.caption || ''}\n\n#Shorts` },
+              status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+            }),
+          }
+        );
+        const uploadUrl = initResponse.headers.get('Location');
+        if (!initResponse.ok || !uploadUrl) {
+          throw new Error('O YouTube recusou o início do upload.');
+        }
 
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'video/mp4',
-          'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`,
-        },
-        body: videoBuffer,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error('Falha ao enviar o vídeo para o TikTok.');
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(videoSize) },
+          body: videoBuffer,
+        });
+        const uploadData = await uploadResponse.json().catch(() => null);
+        if (!uploadResponse.ok || !uploadData?.id) {
+          throw new Error('Falha ao enviar o vídeo para o YouTube.');
+        }
+        publishedId = uploadData.id;
       }
 
       await admin.from('scheduled_posts').update({
         status: 'posted',
-        platform_post_id: publishId,
+        platform_post_id: publishedId,
         updated_at: new Date().toISOString(),
       }).eq('id', post.id);
       results.push({ id: post.id, status: 'posted' });

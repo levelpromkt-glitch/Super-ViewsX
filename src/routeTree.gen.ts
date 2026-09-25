@@ -26,6 +26,7 @@ import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templ
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
 import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
 import { Route as DashboardConfiguracoesTiktokCallbackRouteImport } from './routes/dashboard.configuracoes.tiktok.callback'
+import { Route as DashboardConfiguracoesYoutubeCallbackRouteImport } from './routes/dashboard.configuracoes.youtube.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -114,6 +115,12 @@ const DashboardConfiguracoesTiktokCallbackRoute =
     path: '/tiktok/callback',
     getParentRoute: () => DashboardConfiguracoesRoute,
   } as any)
+const DashboardConfiguracoesYoutubeCallbackRoute =
+  DashboardConfiguracoesYoutubeCallbackRouteImport.update({
+    id: '/youtube/callback',
+    path: '/youtube/callback',
+    getParentRoute: () => DashboardConfiguracoesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
+  '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -151,6 +159,7 @@ export interface FileRoutesByTo {
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
+  '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -171,6 +180,7 @@ export interface FileRoutesById {
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
+  '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/dashboard/transcricao'
     | '/dashboard/'
     | '/dashboard/configuracoes/tiktok/callback'
+    | '/dashboard/configuracoes/youtube/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/dashboard/transcricao'
     | '/dashboard'
     | '/dashboard/configuracoes/tiktok/callback'
+    | '/dashboard/configuracoes/youtube/callback'
   id:
     | '__root__'
     | '/'
@@ -229,6 +241,7 @@ export interface FileRouteTypes {
     | '/dashboard/transcricao'
     | '/dashboard/'
     | '/dashboard/configuracoes/tiktok/callback'
+    | '/dashboard/configuracoes/youtube/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -359,17 +372,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardConfiguracoesTiktokCallbackRouteImport
       parentRoute: typeof DashboardConfiguracoesRoute
     }
+    '/dashboard/configuracoes/youtube/callback': {
+      id: '/dashboard/configuracoes/youtube/callback'
+      path: '/youtube/callback'
+      fullPath: '/dashboard/configuracoes/youtube/callback'
+      preLoaderRoute: typeof DashboardConfiguracoesYoutubeCallbackRouteImport
+      parentRoute: typeof DashboardConfiguracoesRoute
+    }
   }
 }
 
 interface DashboardConfiguracoesRouteChildren {
   DashboardConfiguracoesTiktokCallbackRoute: typeof DashboardConfiguracoesTiktokCallbackRoute
+  DashboardConfiguracoesYoutubeCallbackRoute: typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
 
 const DashboardConfiguracoesRouteChildren: DashboardConfiguracoesRouteChildren =
   {
     DashboardConfiguracoesTiktokCallbackRoute:
       DashboardConfiguracoesTiktokCallbackRoute,
+    DashboardConfiguracoesYoutubeCallbackRoute:
+      DashboardConfiguracoesYoutubeCallbackRoute,
   }
 
 const DashboardConfiguracoesRouteWithChildren =
