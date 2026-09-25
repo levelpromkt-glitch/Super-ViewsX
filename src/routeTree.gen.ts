@@ -16,8 +16,8 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
 import { Route as DashboardBibliotecaRouteImport } from './routes/dashboard.biblioteca'
+import { Route as DashboardCampanhasRouteImport } from './routes/dashboard.campanhas'
 import { Route as DashboardConfiguracoesRouteImport } from './routes/dashboard.configuracoes'
-import { Route as DashboardDesempenhoRouteImport } from './routes/dashboard.desempenho'
 import { Route as DashboardEditorRouteImport } from './routes/dashboard.editor'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
@@ -65,14 +65,14 @@ const DashboardBibliotecaRoute = DashboardBibliotecaRouteImport.update({
   path: '/biblioteca',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardCampanhasRoute = DashboardCampanhasRouteImport.update({
+  id: '/campanhas',
+  path: '/campanhas',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardConfiguracoesRoute = DashboardConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardDesempenhoRoute = DashboardDesempenhoRouteImport.update({
-  id: '/desempenho',
-  path: '/desempenho',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardEditorRoute = DashboardEditorRouteImport.update({
@@ -142,8 +142,8 @@ export interface FileRoutesByFullPath {
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
+  '/dashboard/campanhas': typeof DashboardCampanhasRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
-  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -163,8 +163,8 @@ export interface FileRoutesByTo {
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
+  '/dashboard/campanhas': typeof DashboardCampanhasRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
-  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -186,8 +186,8 @@ export interface FileRoutesById {
   '/termos': typeof TermosRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
+  '/dashboard/campanhas': typeof DashboardCampanhasRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
-  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -210,8 +210,8 @@ export interface FileRouteTypes {
     | '/termos'
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
+    | '/dashboard/campanhas'
     | '/dashboard/configuracoes'
-    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -231,8 +231,8 @@ export interface FileRouteTypes {
     | '/termos'
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
+    | '/dashboard/campanhas'
     | '/dashboard/configuracoes'
-    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -253,8 +253,8 @@ export interface FileRouteTypes {
     | '/termos'
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
+    | '/dashboard/campanhas'
     | '/dashboard/configuracoes'
-    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -327,18 +327,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardBibliotecaRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/campanhas': {
+      id: '/dashboard/campanhas'
+      path: '/campanhas'
+      fullPath: '/dashboard/campanhas'
+      preLoaderRoute: typeof DashboardCampanhasRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/configuracoes': {
       id: '/dashboard/configuracoes'
       path: '/configuracoes'
       fullPath: '/dashboard/configuracoes'
       preLoaderRoute: typeof DashboardConfiguracoesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/desempenho': {
-      id: '/dashboard/desempenho'
-      path: '/desempenho'
-      fullPath: '/dashboard/desempenho'
-      preLoaderRoute: typeof DashboardDesempenhoRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/editor': {
@@ -445,8 +445,8 @@ const DashboardConfiguracoesRouteWithChildren =
 interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
   DashboardBibliotecaRoute: typeof DashboardBibliotecaRoute
+  DashboardCampanhasRoute: typeof DashboardCampanhasRoute
   DashboardConfiguracoesRoute: typeof DashboardConfiguracoesRouteWithChildren
-  DashboardDesempenhoRoute: typeof DashboardDesempenhoRoute
   DashboardEditorRoute: typeof DashboardEditorRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
@@ -461,8 +461,8 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
   DashboardBibliotecaRoute: DashboardBibliotecaRoute,
+  DashboardCampanhasRoute: DashboardCampanhasRoute,
   DashboardConfiguracoesRoute: DashboardConfiguracoesRouteWithChildren,
-  DashboardDesempenhoRoute: DashboardDesempenhoRoute,
   DashboardEditorRoute: DashboardEditorRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,

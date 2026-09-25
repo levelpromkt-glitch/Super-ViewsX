@@ -67,7 +67,7 @@ function PostTableRows({ posts, ranked }: { posts: PerformancePost[]; ranked?: b
 }
 
 export function PerformanceOverview() {
-  const [period, setPeriod] = useState<PerformancePeriod>("7d");
+  const [period, setPeriod] = useState<PerformancePeriod>("24h");
   const [accountId, setAccountId] = useState("all");
   const [data, setData] = useState<PerformanceData | null>(null);
   const [error, setError] = useState<string | null>(null);

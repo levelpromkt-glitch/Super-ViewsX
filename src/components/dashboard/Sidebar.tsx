@@ -44,8 +44,8 @@ const TemplatesIcon = ({ size = 20, className }: { size?: number; className?: st
 );
 
 const items = [
-  { to: "/dashboard", label: "Campanhas", icon: Trophy, exact: true, adminOnly: false, pro: false },
-  { to: "/dashboard/desempenho", label: "Desempenho", icon: BarChart3, exact: false, adminOnly: false, pro: false },
+  { to: "/dashboard", label: "Desempenho", icon: BarChart3, exact: true, adminOnly: false, pro: false },
+  { to: "/dashboard/campanhas", label: "Campanhas", icon: Trophy, exact: false, adminOnly: false, pro: false },
   { to: "/dashboard/transcricao", label: "Transcrição", icon: TranscricaoIcon, exact: false, adminOnly: false, pro: false },
   { to: "/dashboard/melhores-momentos", label: "Melhores Momentos", icon: Sparkles, exact: false, adminOnly: false, pro: false },
   { to: "/dashboard/biblioteca", label: "Biblioteca", icon: Heart, exact: false, adminOnly: false, pro: false },
