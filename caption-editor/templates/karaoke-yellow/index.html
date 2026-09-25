@@ -1,0 +1,213 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"sourceVideo","type":"string","label":"Video de origem","default":"assets/sample.mp4"},
+    {"id":"transcriptJson","type":"string","label":"Transcript (JSON)","default":"[{\"word\":\"ISSO\",\"start\":0.3,\"end\":0.6},{\"word\":\"AQUI\",\"start\":0.65,\"end\":0.95},{\"word\":\"E\",\"start\":1.0,\"end\":1.15},{\"word\":\"UM\",\"start\":1.2,\"end\":1.35},{\"word\":\"TESTE\",\"start\":1.4,\"end\":1.9},{\"word\":\"DE\",\"start\":2.4,\"end\":2.55},{\"word\":\"LEGENDA\",\"start\":2.6,\"end\":3.15},{\"word\":\"AUTOMATICA\",\"start\":3.2,\"end\":3.9},{\"word\":\"ESTILO\",\"start\":4.4,\"end\":4.8},{\"word\":\"KARAOKE\",\"start\":4.85,\"end\":5.5}]"},
+    {"id":"accentColor","type":"color","label":"Cor de destaque","default":"#FFD400"},
+    {"id":"logoUrl","type":"string","label":"Logo (URL, opcional)","default":""},
+    {"id":"durationSec","type":"number","label":"Duração do vídeo (segundos)","default":8}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>Modelo: Karaoke Amarelo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #000;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      #bgvideo {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      #logo {
+        position: absolute;
+        top: 48px;
+        right: 48px;
+        max-width: 220px;
+        max-height: 120px;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+      }
+      #captions {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 220px;
+        display: flex;
+        justify-content: center;
+      }
+      .caption-line {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px 16px;
+        text-align: center;
+        background: rgba(0, 0, 0, 0.68);
+        padding: 20px 36px;
+        border-radius: 20px;
+      }
+      .word {
+        font-size: 64px;
+        font-weight: 800;
+        line-height: 1.25;
+        color: #ffffff;
+        text-transform: uppercase;
+        letter-spacing: -0.01em;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-width="1080"
+      data-height="1920"
+    >
+      <video
+        id="bgvideo"
+        class="clip"
+        data-start="0"
+        data-track-index="0"
+        data-var-src="sourceVideo"
+        src="assets/sample.mp4"
+        muted
+        playsinline
+      ></video>
+
+      <audio
+        id="bgaudio"
+        data-start="0"
+        data-track-index="0"
+        data-var-src="sourceVideo"
+        src="assets/sample.mp4"
+        data-volume="1"
+      ></audio>
+
+      <img
+        id="logo"
+        class="clip"
+        data-start="0"
+        data-track-index="2"
+        data-var-src="logoUrl"
+        src="assets/placeholder-logo.png"
+      />
+
+      <div id="captions" data-track-index="1"></div>
+    </div>
+
+    <script>
+      // Groups a flat word-timing array into short on-screen phrases, then
+      // builds one .caption-line per phrase (a real "clip", timed to that
+      // phrase's window) with one <span> per word. The active word is
+      // highlighted in the accent color exactly during its own [start,end] —
+      // that's the karaoke effect. All of this must finish, synchronously,
+      // before the timeline is registered (see hyperframes-core: "register
+      // only after the build completes").
+      const MAX_CHUNK_WORDS = 6;
+      const MAX_GAP_SECONDS = 0.6;
+
+      function groupIntoChunks(words) {
+        const chunks = [];
+        let current = [];
+        for (const w of words) {
+          if (current.length === 0) {
+            current.push(w);
+            continue;
+          }
+          const prev = current[current.length - 1];
+          if (w.start - prev.end > MAX_GAP_SECONDS || current.length >= MAX_CHUNK_WORDS) {
+            chunks.push(current);
+            current = [w];
+          } else {
+            current.push(w);
+          }
+        }
+        if (current.length > 0) chunks.push(current);
+        return chunks;
+      }
+
+      function buildCaptions() {
+        const { transcriptJson, logoUrl, durationSec, accentColor } = window.__hyperframes.getVariables();
+
+        // Declaring duration explicitly (root + media) avoids the renderer's
+        // "root duration unknown" browser-probe path entirely — that probe
+        // hangs indefinitely in some render environments (confirmed on Modal).
+        const duration = String(durationSec || 8);
+        document.getElementById("root").dataset.duration = duration;
+        document.getElementById("bgvideo").dataset.duration = duration;
+        document.getElementById("bgaudio").dataset.duration = duration;
+
+        let words = [];
+        try {
+          const parsed = JSON.parse(transcriptJson);
+          if (Array.isArray(parsed)) words = parsed;
+        } catch (e) {
+          console.error("transcriptJson inválido", e);
+        }
+
+        const captionsRoot = document.getElementById("captions");
+        const tl = gsap.timeline({ paused: true });
+
+        const chunks = groupIntoChunks(words);
+        chunks.forEach((chunk) => {
+          const start = chunk[0].start;
+          const end = chunk[chunk.length - 1].end;
+          const duration = Math.max(0.3, end - start);
+
+          const line = document.createElement("div");
+          line.className = "clip caption-line";
+          line.dataset.start = String(start);
+          line.dataset.duration = String(duration);
+          captionsRoot.appendChild(line);
+
+          const spans = chunk.map((w) => {
+            const span = document.createElement("span");
+            span.className = "word";
+            span.textContent = w.word;
+            line.appendChild(span);
+            return span;
+          });
+
+          chunk.forEach((w, i) => {
+            const span = spans[i];
+            const wordStart = Math.max(start, w.start);
+            const wordEnd = Math.min(end, Math.max(w.end, wordStart + 0.05));
+            tl.set(span, { color: accentColor || "#FFD400" }, wordStart);
+            tl.set(span, { color: "#ffffff" }, wordEnd);
+          });
+        });
+
+        const logoEl = document.getElementById("logo");
+        if (!logoUrl) logoEl.style.display = "none";
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["main"] = tl;
+      }
+
+      buildCaptions();
+    </script>
+  </body>
+</html>
