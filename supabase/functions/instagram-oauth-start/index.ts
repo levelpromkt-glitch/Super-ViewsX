@@ -9,7 +9,7 @@ const corsHeaders = {
 const INSTAGRAM_REDIRECT_URI = "https://www.superviewsx.com.br/dashboard/configuracoes/instagram/callback";
 // "API do Instagram com o Login do Instagram" — no Facebook Page required,
 // just a Business/Creator Instagram account added as a tester on the Meta app.
-const INSTAGRAM_SCOPES = "instagram_business_basic,instagram_business_content_publish";
+const INSTAGRAM_SCOPES = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

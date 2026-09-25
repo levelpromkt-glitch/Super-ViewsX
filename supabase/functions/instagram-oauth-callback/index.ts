@@ -137,7 +137,7 @@ serve(async (req) => {
       access_token: accessToken,
       refresh_token: null,
       token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-      scope: 'instagram_business_basic,instagram_business_content_publish',
+      scope: 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,platform,platform_user_id' });
 

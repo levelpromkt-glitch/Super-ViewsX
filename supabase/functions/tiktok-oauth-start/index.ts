@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const TIKTOK_REDIRECT_URI = "https://www.superviewsx.com.br/dashboard/configuracoes/tiktok/callback";
-const TIKTOK_SCOPES = "user.info.basic,video.publish";
+const TIKTOK_SCOPES = "user.info.basic,video.publish,video.list";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
