@@ -115,4 +115,44 @@ export const SocialAccountsService = {
     }
     return data.videoId as string;
   },
+
+  async getInstagramAuthorizeUrl(): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("instagram-oauth-start", { body: {} });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao iniciar conexão com o Instagram.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao iniciar conexão com o Instagram.", "UNKNOWN_ERROR");
+    }
+    return data.authorizeUrl as string;
+  },
+
+  async completeInstagramOAuth(code: string, state: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("instagram-oauth-callback", {
+      body: { code, state },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao concluir a conexão com o Instagram.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao concluir a conexão com o Instagram.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.platformUsername as string;
+  },
+
+  async publishToInstagram(accountId: string, videoId: string, start: number, end: number, caption: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke("instagram-publish", {
+      body: { accountId, videoId, start, end, caption },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no Instagram.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao publicar no Instagram.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.mediaId as string;
+  },
 };

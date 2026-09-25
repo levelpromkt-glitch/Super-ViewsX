@@ -25,6 +25,7 @@ import { Route as DashboardPublicarRouteImport } from './routes/dashboard.public
 import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
 import { Route as DashboardTopPlayersRouteImport } from './routes/dashboard.top-players'
 import { Route as DashboardTranscricaoRouteImport } from './routes/dashboard.transcricao'
+import { Route as DashboardConfiguracoesInstagramCallbackRouteImport } from './routes/dashboard.configuracoes.instagram.callback'
 import { Route as DashboardConfiguracoesTiktokCallbackRouteImport } from './routes/dashboard.configuracoes.tiktok.callback'
 import { Route as DashboardConfiguracoesYoutubeCallbackRouteImport } from './routes/dashboard.configuracoes.youtube.callback'
 
@@ -109,6 +110,12 @@ const DashboardTranscricaoRoute = DashboardTranscricaoRouteImport.update({
   path: '/transcricao',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardConfiguracoesInstagramCallbackRoute =
+  DashboardConfiguracoesInstagramCallbackRouteImport.update({
+    id: '/instagram/callback',
+    path: '/instagram/callback',
+    getParentRoute: () => DashboardConfiguracoesRoute,
+  } as any)
 const DashboardConfiguracoesTiktokCallbackRoute =
   DashboardConfiguracoesTiktokCallbackRouteImport.update({
     id: '/tiktok/callback',
@@ -139,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/instagram/callback': typeof DashboardConfiguracoesInstagramCallbackRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
   '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
@@ -158,6 +166,7 @@ export interface FileRoutesByTo {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/instagram/callback': typeof DashboardConfiguracoesInstagramCallbackRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
   '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
@@ -179,6 +188,7 @@ export interface FileRoutesById {
   '/dashboard/top-players': typeof DashboardTopPlayersRoute
   '/dashboard/transcricao': typeof DashboardTranscricaoRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/configuracoes/instagram/callback': typeof DashboardConfiguracoesInstagramCallbackRoute
   '/dashboard/configuracoes/tiktok/callback': typeof DashboardConfiguracoesTiktokCallbackRoute
   '/dashboard/configuracoes/youtube/callback': typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard/'
+    | '/dashboard/configuracoes/instagram/callback'
     | '/dashboard/configuracoes/tiktok/callback'
     | '/dashboard/configuracoes/youtube/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard'
+    | '/dashboard/configuracoes/instagram/callback'
     | '/dashboard/configuracoes/tiktok/callback'
     | '/dashboard/configuracoes/youtube/callback'
   id:
@@ -240,6 +252,7 @@ export interface FileRouteTypes {
     | '/dashboard/top-players'
     | '/dashboard/transcricao'
     | '/dashboard/'
+    | '/dashboard/configuracoes/instagram/callback'
     | '/dashboard/configuracoes/tiktok/callback'
     | '/dashboard/configuracoes/youtube/callback'
   fileRoutesById: FileRoutesById
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTranscricaoRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/configuracoes/instagram/callback': {
+      id: '/dashboard/configuracoes/instagram/callback'
+      path: '/instagram/callback'
+      fullPath: '/dashboard/configuracoes/instagram/callback'
+      preLoaderRoute: typeof DashboardConfiguracoesInstagramCallbackRouteImport
+      parentRoute: typeof DashboardConfiguracoesRoute
+    }
     '/dashboard/configuracoes/tiktok/callback': {
       id: '/dashboard/configuracoes/tiktok/callback'
       path: '/tiktok/callback'
@@ -383,12 +403,15 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardConfiguracoesRouteChildren {
+  DashboardConfiguracoesInstagramCallbackRoute: typeof DashboardConfiguracoesInstagramCallbackRoute
   DashboardConfiguracoesTiktokCallbackRoute: typeof DashboardConfiguracoesTiktokCallbackRoute
   DashboardConfiguracoesYoutubeCallbackRoute: typeof DashboardConfiguracoesYoutubeCallbackRoute
 }
 
 const DashboardConfiguracoesRouteChildren: DashboardConfiguracoesRouteChildren =
   {
+    DashboardConfiguracoesInstagramCallbackRoute:
+      DashboardConfiguracoesInstagramCallbackRoute,
     DashboardConfiguracoesTiktokCallbackRoute:
       DashboardConfiguracoesTiktokCallbackRoute,
     DashboardConfiguracoesYoutubeCallbackRoute:

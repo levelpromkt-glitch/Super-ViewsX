@@ -217,7 +217,7 @@ function MelhoresMomentosPage() {
   useEffect(() => {
     SocialAccountsService.listConnected()
       .then((accounts) => {
-        setPublishableAccounts(accounts.filter((a) => a.platform === "tiktok" || a.platform === "youtube"));
+        setPublishableAccounts(accounts.filter((a) => a.platform === "tiktok" || a.platform === "youtube" || a.platform === "instagram"));
       })
       .catch(() => setPublishableAccounts([]));
   }, []);
@@ -413,6 +413,8 @@ function MelhoresMomentosPage() {
       const start = getEffectiveStart(publishTarget);
       if (account.platform === "youtube") {
         await SocialAccountsService.publishToYoutube(account.id, videoId, start, publishTarget.end, captionDraft);
+      } else if (account.platform === "instagram") {
+        await SocialAccountsService.publishToInstagram(account.id, videoId, start, publishTarget.end, captionDraft);
       } else {
         await SocialAccountsService.publishToTikTok(account.id, videoId, start, publishTarget.end, captionDraft);
       }
@@ -668,7 +670,7 @@ function MelhoresMomentosPage() {
                 >
                   {publishableAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.label || a.platform_username} ({a.platform === "youtube" ? "YouTube" : "TikTok"})
+                      {a.label || a.platform_username} ({a.platform === "youtube" ? "YouTube" : a.platform === "instagram" ? "Instagram" : "TikTok"})
                     </option>
                   ))}
                 </select>

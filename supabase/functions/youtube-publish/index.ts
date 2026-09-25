@@ -168,7 +168,26 @@ serve(async (req) => {
           { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      videoBuffer = new Uint8Array(await clipResponse.arrayBuffer());
+      // The VM's /clip endpoint uploads the finished clip to R2 and responds
+      // with {success, downloadUrl} JSON, not raw video bytes.
+      const clipResult = await clipResponse.json().catch(() => null);
+      if (!clipResult?.downloadUrl) {
+        console.error('clip-service returned no downloadUrl', clipResult);
+        await markResult('failed', { error_message: 'Não foi possível gerar o corte para publicar.' });
+        return new Response(
+          JSON.stringify({ success: false, code: 'CLIP_FAILED', message: 'Não foi possível gerar o corte para publicar.' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const videoFileResponse = await fetch(clipResult.downloadUrl);
+      if (!videoFileResponse.ok) {
+        await markResult('failed', { error_message: 'Não foi possível baixar o corte gerado.' });
+        return new Response(
+          JSON.stringify({ success: false, code: 'CLIP_FAILED', message: 'Não foi possível baixar o corte gerado.' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      videoBuffer = new Uint8Array(await videoFileResponse.arrayBuffer());
     }
     const videoSize = videoBuffer.byteLength;
 

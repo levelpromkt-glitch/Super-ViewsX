@@ -52,7 +52,8 @@ export const PostsService = {
   },
 
   async publishNow(platform: SocialPlatform, accountId: string, storagePath: string, caption: string): Promise<string> {
-    const functionName = platform === "youtube" ? "youtube-publish" : "tiktok-publish-upload";
+    const functionName =
+      platform === "youtube" ? "youtube-publish" : platform === "instagram" ? "instagram-publish" : "tiktok-publish-upload";
     const { data, error } = await supabase.functions.invoke(functionName, {
       body: { accountId, storagePath, caption },
     });

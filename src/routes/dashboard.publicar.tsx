@@ -19,6 +19,12 @@ export const Route = createFileRoute("/dashboard/publicar")({
 import { PostsService, PostsError, ScheduledPost } from "@/services/postsService";
 import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccountsService";
 
+const PLATFORM_LABELS: Record<string, string> = {
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  instagram: "Instagram",
+};
+
 const STATUS_LABELS: Record<ScheduledPost["status"], { label: string; color: string }> = {
   pending: { label: "Agendado", color: "var(--text-secondary)" },
   processing: { label: "Publicando...", color: "var(--primary-lime)" },
@@ -58,7 +64,7 @@ function PublicarPage() {
   useEffect(() => {
     SocialAccountsService.listConnected()
       .then((all) => {
-        const publishable = all.filter((a) => a.platform === "tiktok" || a.platform === "youtube");
+        const publishable = all.filter((a) => a.platform === "tiktok" || a.platform === "youtube" || a.platform === "instagram");
         setAccounts(publishable);
         if (publishable.length > 0) setSelectedAccountId(publishable[0].id);
       })
@@ -101,7 +107,7 @@ function PublicarPage() {
       const storagePath = await PostsService.uploadVideo(file);
 
       const platform = selectedAccount!.platform;
-      const platformLabel = platform === "youtube" ? "YouTube" : "TikTok";
+      const platformLabel = PLATFORM_LABELS[platform] ?? platform;
       if (mode === "now") {
         setSubmitStatus(`Publicando no ${platformLabel}...`);
         await PostsService.publishNow(platform, selectedAccountId, storagePath, caption);
@@ -150,7 +156,7 @@ function PublicarPage() {
         {accounts !== null && accounts.length === 0 && (
           <div className="tr-error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <AlertCircle size={14} />
-            Conecte uma conta do TikTok ou YouTube antes de publicar.{" "}
+            Conecte uma conta do TikTok, YouTube ou Instagram antes de publicar.{" "}
             <Link to="/dashboard/configuracoes" style={{ color: "var(--primary-lime)", marginLeft: 4 }}>
               Conectar agora
             </Link>
@@ -167,7 +173,7 @@ function PublicarPage() {
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.label || a.platform_username} ({a.platform === "youtube" ? "YouTube" : "TikTok"})
+                  {a.label || a.platform_username} ({PLATFORM_LABELS[a.platform] ?? a.platform})
                 </option>
               ))}
             </select>

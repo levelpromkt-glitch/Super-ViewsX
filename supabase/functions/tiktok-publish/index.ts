@@ -135,7 +135,25 @@ serve(async (req) => {
       );
     }
 
-    const videoBuffer = new Uint8Array(await clipResponse.arrayBuffer());
+    // The VM's /clip endpoint uploads the finished clip to R2 and responds
+    // with {success, downloadUrl} JSON, not raw video bytes — fetch the
+    // actual file from that signed URL before handing it to TikTok.
+    const clipResult = await clipResponse.json().catch(() => null);
+    if (!clipResult?.downloadUrl) {
+      console.error('clip-service returned no downloadUrl', clipResult);
+      return new Response(
+        JSON.stringify({ success: false, code: 'CLIP_FAILED', message: 'Não foi possível gerar o corte para publicar.' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const videoFileResponse = await fetch(clipResult.downloadUrl);
+    if (!videoFileResponse.ok) {
+      return new Response(
+        JSON.stringify({ success: false, code: 'CLIP_FAILED', message: 'Não foi possível baixar o corte gerado.' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const videoBuffer = new Uint8Array(await videoFileResponse.arrayBuffer());
     const videoSize = videoBuffer.byteLength;
 
     // 2. Ask TikTok what privacy levels this creator's account allows.

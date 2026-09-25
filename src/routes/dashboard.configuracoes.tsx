@@ -22,7 +22,7 @@ const PLATFORMS: {
 }[] = [
   { id: "tiktok", label: "TikTok", logo: "/tiktok-logo.png", available: true },
   { id: "youtube", label: "YouTube", logo: "/youtube-logo.png", available: true },
-  { id: "instagram", label: "Instagram", icon: Camera, available: false },
+  { id: "instagram", label: "Instagram", icon: Camera, available: true },
 ];
 
 // One row for one connected account, with inline rename (click the label to
@@ -136,7 +136,7 @@ function ConfiguracoesPage() {
     loadAccounts();
 
     const params = new URLSearchParams(window.location.search);
-    for (const [platform, label] of [["tiktok", "TikTok"], ["youtube", "YouTube"]] as const) {
+    for (const [platform, label] of [["tiktok", "TikTok"], ["youtube", "YouTube"], ["instagram", "Instagram"]] as const) {
       const status = params.get(platform);
       if (status === "connected") {
         setBanner({ type: "success", text: `Conta do ${label} conectada com sucesso!` });
@@ -157,7 +157,9 @@ function ConfiguracoesPage() {
           ? await SocialAccountsService.getTikTokAuthorizeUrl()
           : platform === "youtube"
             ? await SocialAccountsService.getYoutubeAuthorizeUrl()
-            : null;
+            : platform === "instagram"
+              ? await SocialAccountsService.getInstagramAuthorizeUrl()
+              : null;
       if (!authorizeUrl) return;
       window.location.href = authorizeUrl;
     } catch (err: any) {
