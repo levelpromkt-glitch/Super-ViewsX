@@ -155,7 +155,8 @@ serve(async (req) => {
             {
               method: 'POST',
               headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ max_count: POSTS_PER_ACCOUNT }),
+              // TikTok caps max_count at 20 — unlike YouTube/Instagram's higher limits.
+              body: JSON.stringify({ max_count: Math.min(POSTS_PER_ACCOUNT, 20) }),
             }
           );
           const listData = await listResponse.json();

@@ -17,6 +17,7 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
 import { Route as DashboardBibliotecaRouteImport } from './routes/dashboard.biblioteca'
 import { Route as DashboardConfiguracoesRouteImport } from './routes/dashboard.configuracoes'
+import { Route as DashboardDesempenhoRouteImport } from './routes/dashboard.desempenho'
 import { Route as DashboardEditorRouteImport } from './routes/dashboard.editor'
 import { Route as DashboardHashtagRouteImport } from './routes/dashboard.hashtag'
 import { Route as DashboardMelhoresMomentosRouteImport } from './routes/dashboard.melhores-momentos'
@@ -67,6 +68,11 @@ const DashboardBibliotecaRoute = DashboardBibliotecaRouteImport.update({
 const DashboardConfiguracoesRoute = DashboardConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardDesempenhoRoute = DashboardDesempenhoRouteImport.update({
+  id: '/desempenho',
+  path: '/desempenho',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardEditorRoute = DashboardEditorRouteImport.update({
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/biblioteca': typeof DashboardBibliotecaRoute
   '/dashboard/configuracoes': typeof DashboardConfiguracoesRouteWithChildren
+  '/dashboard/desempenho': typeof DashboardDesempenhoRoute
   '/dashboard/editor': typeof DashboardEditorRoute
   '/dashboard/hashtag': typeof DashboardHashtagRoute
   '/dashboard/melhores-momentos': typeof DashboardMelhoresMomentosRoute
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/dashboard/admin'
     | '/dashboard/biblioteca'
     | '/dashboard/configuracoes'
+    | '/dashboard/desempenho'
     | '/dashboard/editor'
     | '/dashboard/hashtag'
     | '/dashboard/melhores-momentos'
@@ -320,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/dashboard/configuracoes'
       preLoaderRoute: typeof DashboardConfiguracoesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/desempenho': {
+      id: '/dashboard/desempenho'
+      path: '/desempenho'
+      fullPath: '/dashboard/desempenho'
+      preLoaderRoute: typeof DashboardDesempenhoRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/editor': {
@@ -427,6 +446,7 @@ interface DashboardRouteChildren {
   DashboardAdminRoute: typeof DashboardAdminRoute
   DashboardBibliotecaRoute: typeof DashboardBibliotecaRoute
   DashboardConfiguracoesRoute: typeof DashboardConfiguracoesRouteWithChildren
+  DashboardDesempenhoRoute: typeof DashboardDesempenhoRoute
   DashboardEditorRoute: typeof DashboardEditorRoute
   DashboardHashtagRoute: typeof DashboardHashtagRoute
   DashboardMelhoresMomentosRoute: typeof DashboardMelhoresMomentosRoute
@@ -442,6 +462,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAdminRoute: DashboardAdminRoute,
   DashboardBibliotecaRoute: DashboardBibliotecaRoute,
   DashboardConfiguracoesRoute: DashboardConfiguracoesRouteWithChildren,
+  DashboardDesempenhoRoute: DashboardDesempenhoRoute,
   DashboardEditorRoute: DashboardEditorRoute,
   DashboardHashtagRoute: DashboardHashtagRoute,
   DashboardMelhoresMomentosRoute: DashboardMelhoresMomentosRoute,
