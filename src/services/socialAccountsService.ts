@@ -4,8 +4,11 @@ import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 export type SocialPlatform = "tiktok" | "youtube" | "instagram";
 
 export type ConnectedAccount = {
+  id: string;
   platform: SocialPlatform;
+  platform_user_id: string;
   platform_username: string | null;
+  label: string | null;
   connected_at: string;
 };
 
@@ -23,8 +26,13 @@ export const SocialAccountsService = {
     return (data || []) as ConnectedAccount[];
   },
 
-  async disconnect(platform: SocialPlatform): Promise<void> {
-    const { error } = await supabase.rpc("disconnect_social_account", { p_platform: platform });
+  async disconnect(accountId: string): Promise<void> {
+    const { error } = await supabase.rpc("disconnect_social_account", { p_account_id: accountId });
+    if (error) throw new SocialAccountsError(error.message, "RPC_ERROR");
+  },
+
+  async rename(accountId: string, label: string): Promise<void> {
+    const { error } = await supabase.rpc("rename_social_account", { p_account_id: accountId, p_label: label });
     if (error) throw new SocialAccountsError(error.message, "RPC_ERROR");
   },
 
@@ -54,9 +62,9 @@ export const SocialAccountsService = {
     return data.platformUsername as string;
   },
 
-  async publishToTikTok(videoId: string, start: number, end: number, caption: string): Promise<string> {
+  async publishToTikTok(accountId: string, videoId: string, start: number, end: number, caption: string): Promise<string> {
     const { data, error } = await supabase.functions.invoke("tiktok-publish", {
-      body: { videoId, start, end, caption },
+      body: { accountId, videoId, start, end, caption },
     });
     if (error) {
       const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no TikTok.");

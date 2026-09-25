@@ -93,17 +93,30 @@ serve(async (req) => {
       console.error('TikTok user info fetch failed', e);
     }
 
+    // Multiple TikTok accounts per user are allowed now — the conflict key is
+    // the actual external account (user_id, platform, platform_user_id), not
+    // just (user_id, platform). Reconnecting the SAME account updates its
+    // tokens in place; a DIFFERENT account creates a new row alongside it.
+    const { data: existing } = await supabase
+      .from('social_accounts')
+      .select('label')
+      .eq('user_id', stateRow.user_id)
+      .eq('platform', 'tiktok')
+      .eq('platform_user_id', open_id)
+      .maybeSingle();
+
     const { error: upsertError } = await supabase.from('social_accounts').upsert({
       user_id: stateRow.user_id,
       platform: 'tiktok',
       platform_user_id: open_id,
       platform_username: displayName,
+      label: existing?.label || displayName,
       access_token,
       refresh_token,
       token_expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
       scope,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,platform' });
+    }, { onConflict: 'user_id,platform,platform_user_id' });
 
     if (upsertError) {
       console.error('Failed to store TikTok tokens', upsertError);

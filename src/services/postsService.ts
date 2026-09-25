@@ -7,6 +7,7 @@ export type PostStatus = "pending" | "processing" | "posted" | "failed" | "cance
 export type ScheduledPost = {
   id: string;
   platform: SocialPlatform;
+  account_id: string | null;
   video_url: string;
   caption: string | null;
   scheduled_at: string;
@@ -50,9 +51,9 @@ export const PostsService = {
     return path;
   },
 
-  async publishNow(storagePath: string, caption: string): Promise<string> {
+  async publishNow(accountId: string, storagePath: string, caption: string): Promise<string> {
     const { data, error } = await supabase.functions.invoke("tiktok-publish-upload", {
-      body: { storagePath, caption },
+      body: { accountId, storagePath, caption },
     });
     if (error) {
       const message = await readEdgeFunctionErrorMessage(error, "Erro ao publicar no TikTok.");
@@ -64,13 +65,14 @@ export const PostsService = {
     return data.publishId as string;
   },
 
-  async schedulePost(storagePath: string, caption: string, scheduledAt: Date): Promise<void> {
+  async schedulePost(accountId: string, storagePath: string, caption: string, scheduledAt: Date): Promise<void> {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) throw new PostsError("Sessão inválida.", "UNAUTHENTICATED");
 
     const { error } = await supabase.from("scheduled_posts").insert({
       user_id: user.id,
       platform: "tiktok",
+      account_id: accountId,
       video_url: storagePath,
       caption,
       scheduled_at: scheduledAt.toISOString(),

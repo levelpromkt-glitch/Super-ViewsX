@@ -26,7 +26,7 @@ import { TranscriptService, TranscriptError } from "@/services/transcriptService
 import type { TranscriptLine } from "@/services/transcript/types";
 import { ViralMomentsService, ViralMomentsError, ViralMoment, DurationPreset, NarrativeProfile, AudioSignal } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
-import { SocialAccountsService, SocialAccountsError } from "@/services/socialAccountsService";
+import { SocialAccountsService, SocialAccountsError, ConnectedAccount } from "@/services/socialAccountsService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
@@ -202,8 +202,9 @@ function MelhoresMomentosPage() {
   const getEffectiveStart = (m: ViralMoment) => (useHook[m.id] && m.hookStart !== undefined ? m.hookStart : m.start);
   const getEffectiveTitle = (m: ViralMoment) => m.titles[selectedTitle[m.id] ?? 0] ?? m.title;
 
-  const [tiktokConnected, setTiktokConnected] = useState<boolean | null>(null);
+  const [tiktokAccounts, setTiktokAccounts] = useState<ConnectedAccount[] | null>(null);
   const [publishTarget, setPublishTarget] = useState<ViralMoment | null>(null);
+  const [publishAccountId, setPublishAccountId] = useState<string>("");
   const [captionDraft, setCaptionDraft] = useState("");
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -211,8 +212,11 @@ function MelhoresMomentosPage() {
 
   useEffect(() => {
     SocialAccountsService.listConnected()
-      .then((accounts) => setTiktokConnected(accounts.some((a) => a.platform === "tiktok")))
-      .catch(() => setTiktokConnected(false));
+      .then((accounts) => {
+        const tiktok = accounts.filter((a) => a.platform === "tiktok");
+        setTiktokAccounts(tiktok);
+      })
+      .catch(() => setTiktokAccounts([]));
   }, []);
 
   useEffect(() => {
@@ -372,16 +376,17 @@ function MelhoresMomentosPage() {
   const handleOpenPublish = (m: ViralMoment) => {
     setPublishError(null);
     setPublishTarget(m);
+    setPublishAccountId(tiktokAccounts?.[0]?.id || "");
     setCaptionDraft(getEffectiveTitle(m));
   };
 
   const handleConfirmPublish = async () => {
-    if (!videoId || !publishTarget) return;
+    if (!videoId || !publishTarget || !publishAccountId) return;
     setPublishError(null);
     setPublishingId(publishTarget.id);
     try {
       const start = getEffectiveStart(publishTarget);
-      await SocialAccountsService.publishToTikTok(videoId, start, publishTarget.end, captionDraft);
+      await SocialAccountsService.publishToTikTok(publishAccountId, videoId, start, publishTarget.end, captionDraft);
       setPublishedIds((prev) => new Set(prev).add(publishTarget.id));
       setPublishTarget(null);
     } catch (error: any) {
@@ -623,6 +628,23 @@ function MelhoresMomentosPage() {
             </button>
           </div>
           <div className="tr-field" style={{ padding: "0 20px 20px" }}>
+            {tiktokAccounts && tiktokAccounts.length > 1 && (
+              <>
+                <label className="hs-label">Publicar como</label>
+                <select
+                  className="tr-input"
+                  style={{ marginBottom: 12 }}
+                  value={publishAccountId}
+                  onChange={(e) => setPublishAccountId(e.target.value)}
+                >
+                  {tiktokAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label || a.platform_username} (TikTok)
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label className="hs-label">Legenda</label>
             <textarea
               className="tr-input"
@@ -636,7 +658,7 @@ function MelhoresMomentosPage() {
               className="btn-primary tr-btn-main"
               style={{ marginTop: 12 }}
               onClick={handleConfirmPublish}
-              disabled={publishingId === publishTarget.id}
+              disabled={publishingId === publishTarget.id || !publishAccountId}
             >
               {publishingId === publishTarget.id ? (
                 <>
@@ -791,7 +813,7 @@ function MelhoresMomentosPage() {
                         </a>
                       )}
                       {sourceMode === "youtube" && (
-                        tiktokConnected === false ? (
+                        tiktokAccounts && tiktokAccounts.length === 0 ? (
                           <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
                             <Send size={12} /> Conectar TikTok
                           </Link>
@@ -800,7 +822,7 @@ function MelhoresMomentosPage() {
                             <CheckCircle2 size={12} /> Publicado
                           </span>
                         ) : (
-                          <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={tiktokConnected === null}>
+                          <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={tiktokAccounts === null}>
                             <Send size={12} /> Publicar no TikTok
                           </button>
                         )

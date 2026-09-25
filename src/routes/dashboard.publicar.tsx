@@ -17,7 +17,7 @@ export const Route = createFileRoute("/dashboard/publicar")({
 });
 
 import { PostsService, PostsError, ScheduledPost } from "@/services/postsService";
-import { SocialAccountsService } from "@/services/socialAccountsService";
+import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccountsService";
 
 const STATUS_LABELS: Record<ScheduledPost["status"], { label: string; color: string }> = {
   pending: { label: "Agendado", color: "var(--text-secondary)" },
@@ -32,7 +32,8 @@ function formatDateTime(iso: string) {
 }
 
 function PublicarPage() {
-  const [tiktokConnected, setTiktokConnected] = useState<boolean | null>(null);
+  const [tiktokAccounts, setTiktokAccounts] = useState<ConnectedAccount[] | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [mode, setMode] = useState<"now" | "schedule">("now");
@@ -55,8 +56,12 @@ function PublicarPage() {
 
   useEffect(() => {
     SocialAccountsService.listConnected()
-      .then((accounts) => setTiktokConnected(accounts.some((a) => a.platform === "tiktok")))
-      .catch(() => setTiktokConnected(false));
+      .then((accounts) => {
+        const tiktok = accounts.filter((a) => a.platform === "tiktok");
+        setTiktokAccounts(tiktok);
+        if (tiktok.length > 0) setSelectedAccountId(tiktok[0].id);
+      })
+      .catch(() => setTiktokAccounts([]));
     loadPosts();
   }, []);
 
@@ -73,6 +78,10 @@ function PublicarPage() {
 
     if (!file) {
       setFormError("Escolha um vídeo do seu computador.");
+      return;
+    }
+    if (!selectedAccountId) {
+      setFormError("Escolha em qual conta do TikTok publicar.");
       return;
     }
     if (mode === "schedule" && !scheduledAt) {
@@ -92,10 +101,10 @@ function PublicarPage() {
 
       if (mode === "now") {
         setSubmitStatus("Publicando no TikTok...");
-        await PostsService.publishNow(storagePath, caption);
+        await PostsService.publishNow(selectedAccountId, storagePath, caption);
         setFormSuccess("Vídeo publicado no TikTok!");
       } else {
-        await PostsService.schedulePost(storagePath, caption, scheduledDate!);
+        await PostsService.schedulePost(selectedAccountId, storagePath, caption, scheduledDate!);
         setFormSuccess("Post agendado com sucesso!");
       }
 
@@ -135,13 +144,30 @@ function PublicarPage() {
           </p>
         </div>
 
-        {tiktokConnected === false && (
+        {tiktokAccounts !== null && tiktokAccounts.length === 0 && (
           <div className="tr-error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <AlertCircle size={14} />
-            Conecte sua conta do TikTok antes de publicar.{" "}
+            Conecte uma conta do TikTok antes de publicar.{" "}
             <Link to="/dashboard/configuracoes" style={{ color: "var(--primary-lime)", marginLeft: 4 }}>
               Conectar agora
             </Link>
+          </div>
+        )}
+
+        {tiktokAccounts !== null && tiktokAccounts.length > 1 && (
+          <div className="tr-field">
+            <label className="hs-label">Publicar como</label>
+            <select
+              className="tr-input"
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+            >
+              {tiktokAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label || a.platform_username} (TikTok)
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -221,7 +247,7 @@ function PublicarPage() {
           </div>
         )}
 
-        <button className="btn-primary tr-btn-main" onClick={handleSubmit} disabled={submitting || tiktokConnected === false}>
+        <button className="btn-primary tr-btn-main" onClick={handleSubmit} disabled={submitting || !selectedAccountId}>
           {submitting ? (
             <>
               <Loader2 size={16} className="tr-spin" /> {submitStatus || "Processando..."}

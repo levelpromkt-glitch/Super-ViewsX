@@ -40,6 +40,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const storagePath: string = body?.storagePath;
     const caption: string = String(body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
+    const accountId: string | undefined = body?.accountId;
 
     if (!storagePath || !storagePath.startsWith(`${user.id}/`)) {
       return new Response(
@@ -47,17 +48,24 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    if (!accountId) {
+      return new Response(
+        JSON.stringify({ success: false, code: 'INVALID_REQUEST', message: 'accountId é obrigatório — escolha qual conta do TikTok vai publicar.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const { data: account, error: accountError } = await admin
       .from('social_accounts')
       .select('*')
+      .eq('id', accountId)
       .eq('user_id', user.id)
       .eq('platform', 'tiktok')
       .single();
 
     if (accountError || !account) {
       return new Response(
-        JSON.stringify({ success: false, code: 'NOT_CONNECTED', message: 'Conecte sua conta do TikTok antes de publicar.' }),
+        JSON.stringify({ success: false, code: 'NOT_CONNECTED', message: 'Essa conta do TikTok não está mais conectada.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -68,6 +76,7 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         platform: 'tiktok',
+        account_id: accountId,
         video_url: storagePath,
         caption,
         scheduled_at: new Date().toISOString(),

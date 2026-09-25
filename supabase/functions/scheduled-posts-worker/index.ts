@@ -53,12 +53,13 @@ serve(async (req) => {
         continue;
       }
 
-      const { data: account } = await admin
-        .from('social_accounts')
-        .select('*')
-        .eq('user_id', post.user_id)
-        .eq('platform', 'tiktok')
-        .single();
+      // Older rows created before multi-account support may not have
+      // account_id set — fall back to "the" TikTok account for those, same
+      // as the old single-account behavior. New rows always carry account_id.
+      const accountQuery = admin.from('social_accounts').select('*').eq('user_id', post.user_id).eq('platform', 'tiktok');
+      const { data: account } = post.account_id
+        ? await accountQuery.eq('id', post.account_id).single()
+        : await accountQuery.limit(1).maybeSingle();
 
       if (!account) {
         throw new Error('Conta do TikTok não está mais conectada.');
