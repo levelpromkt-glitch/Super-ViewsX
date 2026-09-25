@@ -68,6 +68,8 @@ serve(async (req) => {
     const { data: posts, error: postsError } = await postsQuery;
     if (postsError) throw new Error(postsError.message);
 
+    const accountLabelById = new Map((accounts || []).map((a) => [a.id, a.label || a.platform_username || a.platform]));
+
     const totalViews = (posts || []).reduce((sum, p) => sum + Number(p.views || 0), 0);
     const postsCount = (posts || []).length;
     const topClip = (posts || [])[0]
@@ -80,8 +82,21 @@ serve(async (req) => {
         }
       : null;
 
+    // Full ranked list (capped) so the frontend can show a "top N" and a
+    // browsable recent-posts table, not just a single top clip.
+    const postList = (posts || []).slice(0, 50).map((p) => ({
+      platform: p.platform,
+      accountLabel: accountLabelById.get(p.account_id) || p.platform,
+      title: p.title,
+      views: Number(p.views || 0),
+      url: p.url,
+      publishedAt: p.published_at,
+    }));
+
     // Bucket into a continuous series (0-filled) so the chart has no gaps.
-    const bucketMap = new Map<string, { views: number; posts: number }>();
+    // Tracked both as a combined total and split per platform, so the chart
+    // can show a stacked breakdown instead of one undifferentiated line.
+    const bucketMap = new Map<string, { views: number; posts: number; tiktok: number; youtube: number; instagram: number }>();
     const bucketCount = bucketByHour ? hours : Math.ceil(hours / 24);
     const now = new Date();
     for (let i = bucketCount - 1; i >= 0; i--) {
@@ -89,11 +104,11 @@ serve(async (req) => {
       if (bucketByHour) {
         d.setMinutes(0, 0, 0);
         d.setHours(d.getHours() - i);
-        bucketMap.set(d.toISOString().slice(0, 13), { views: 0, posts: 0 });
+        bucketMap.set(d.toISOString().slice(0, 13), { views: 0, posts: 0, tiktok: 0, youtube: 0, instagram: 0 });
       } else {
         d.setHours(0, 0, 0, 0);
         d.setDate(d.getDate() - i);
-        bucketMap.set(d.toISOString().slice(0, 10), { views: 0, posts: 0 });
+        bucketMap.set(d.toISOString().slice(0, 10), { views: 0, posts: 0, tiktok: 0, youtube: 0, instagram: 0 });
       }
     }
     for (const post of posts || []) {
@@ -101,8 +116,12 @@ serve(async (req) => {
       const key = bucketByHour ? d.toISOString().slice(0, 13) : d.toISOString().slice(0, 10);
       const bucket = bucketMap.get(key);
       if (bucket) {
-        bucket.views += Number(post.views || 0);
+        const v = Number(post.views || 0);
+        bucket.views += v;
         bucket.posts += 1;
+        if (post.platform === 'tiktok') bucket.tiktok += v;
+        else if (post.platform === 'youtube') bucket.youtube += v;
+        else if (post.platform === 'instagram') bucket.instagram += v;
       }
     }
     const series = Array.from(bucketMap.entries()).map(([bucket, v]) => ({ bucket, ...v }));
@@ -135,6 +154,7 @@ serve(async (req) => {
         totalViews,
         postsCount,
         topClip,
+        posts: postList,
         series,
         byAccount: Array.from(byAccountMap.values()),
         accounts: (accounts || []).map((a) => ({

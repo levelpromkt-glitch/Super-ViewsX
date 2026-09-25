@@ -11,7 +11,23 @@ export type PerformanceTopClip = {
   publishedAt: string;
 };
 
-export type PerformanceSeriesPoint = { bucket: string; views: number; posts: number };
+export type PerformanceSeriesPoint = {
+  bucket: string;
+  views: number;
+  posts: number;
+  tiktok: number;
+  youtube: number;
+  instagram: number;
+};
+
+export type PerformancePost = {
+  platform: string;
+  accountLabel: string;
+  title: string;
+  views: number;
+  url: string | null;
+  publishedAt: string;
+};
 
 export type PerformanceAccountBreakdown = {
   accountId: string;
@@ -34,6 +50,7 @@ export type PerformanceOverview = {
   totalViews: number;
   postsCount: number;
   topClip: PerformanceTopClip | null;
+  posts: PerformancePost[];
   series: PerformanceSeriesPoint[];
   byAccount: PerformanceAccountBreakdown[];
   accounts: PerformanceAccountOption[];
