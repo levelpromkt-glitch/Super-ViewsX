@@ -22,10 +22,6 @@ function formatBucketLabel(bucket: string) {
   return bucket.slice(8, 10) + "/" + bucket.slice(5, 7);
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
 const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" };
 const PLATFORM_COLORS: Record<string, string> = { tiktok: "#25F4EE", youtube: "#FF3B3B", instagram: "#E1306C" };
 const PERIODS: { value: PerformancePeriod; label: string }[] = [
@@ -54,7 +50,6 @@ function PostTableRows({ posts, ranked }: { posts: PerformancePost[]; ranked?: b
             <div className="admin-cell-name" style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {p.title}
             </div>
-            <div className="admin-cell-sub">{p.accountLabel} · {formatDate(p.publishedAt)}</div>
           </td>
           <td><PlatformTag platform={p.platform} /></td>
           <td style={{ textAlign: "right", fontWeight: 700 }}>{formatNumber(p.views)}</td>
@@ -267,21 +262,6 @@ export function PerformanceOverview() {
             </div>
           </div>
         ) : null}
-      </div>
-
-      <div className="ps-section" style={{ marginBottom: 0 }}>
-        <h3 className="ps-section-title"><ListVideo size={14} className="tr-icon-lime" /> Todos os posts do período</h3>
-        {data.posts.length > 0 ? (
-          <div className="ps-table-scroll">
-            <table className="admin-table">
-              <tbody>
-                <PostTableRows posts={data.posts} />
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="ps-empty">Nenhum post nesse período.</p>
-        )}
       </div>
 
       {error && <div className="tr-error" style={{ marginTop: 12, fontSize: ".78rem" }}>{error}</div>}
