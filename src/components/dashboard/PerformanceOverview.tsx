@@ -23,7 +23,7 @@ function formatBucketLabel(bucket: string) {
 }
 
 const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" };
-const PLATFORM_COLORS: Record<string, string> = { tiktok: "#25F4EE", youtube: "#FF3B3B", instagram: "#E1306C" };
+const PLATFORM_COLORS: Record<string, string> = { tiktok: "#38E07B", youtube: "#FF3B3B", instagram: "#FFC850" };
 const PERIODS: { value: PerformancePeriod; label: string }[] = [
   { value: "24h", label: "24h" },
   { value: "72h", label: "72h" },
