@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const PERIOD_HOURS: Record<string, number> = {
   '24h': 24,
+  '48h': 48,
   '72h': 72,
   '7d': 24 * 7,
   '30d': 24 * 30,

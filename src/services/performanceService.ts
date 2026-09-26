@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
-export type PerformancePeriod = "24h" | "72h" | "7d" | "30d";
+export type PerformancePeriod = "24h" | "48h" | "72h" | "7d" | "30d";
 
 export type PerformanceTopClip = {
   platform: string;

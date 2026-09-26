@@ -26,6 +26,7 @@ const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", youtube: "Yo
 const PLATFORM_COLORS: Record<string, string> = { tiktok: "#38E07B", youtube: "#FF3B3B", instagram: "#FFC850" };
 const PERIODS: { value: PerformancePeriod; label: string }[] = [
   { value: "24h", label: "24h" },
+  { value: "48h", label: "48h" },
   { value: "72h", label: "72h" },
   { value: "7d", label: "7 dias" },
   { value: "30d", label: "30 dias" },
@@ -175,7 +176,7 @@ export function PerformanceOverview() {
 
       <div className="ps-section">
         <h3 className="ps-section-title">
-          <Eye size={14} className="tr-icon-lime" /> Views por {period === "24h" || period === "72h" ? "hora" : "dia"}
+          <Eye size={14} className="tr-icon-lime" /> Views por {period === "24h" || period === "48h" || period === "72h" ? "hora" : "dia"}
         </h3>
         <div style={{ height: 240, minWidth: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
