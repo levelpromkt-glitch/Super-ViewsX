@@ -1,5 +1,4 @@
-import { Rocket, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Zap } from "lucide-react";
 import { ProfileDropdown } from "./ProfileDropdown";
 import { getPlanInfo } from "@/lib/plan";
 import type { User } from "@/lib/types";
@@ -14,29 +13,9 @@ export function Topbar({
   onLogout: () => void;
 }) {
   const planInfo = getPlanInfo(user.plan);
-  const [showSoon, setShowSoon] = useState(false);
-  useEffect(() => {
-    if (!showSoon) return;
-    const t = setTimeout(() => setShowSoon(false), 1800);
-    return () => clearTimeout(t);
-  }, [showSoon]);
   return (
     <div className="main-topbar">
-      <div className="left">
-        <button
-          type="button"
-          className="topbar-cta"
-          onClick={() => setShowSoon(true)}
-        >
-          <span className="topbar-cta-glow" />
-          <Rocket size={15} />
-          <span className="topbar-cta-label">Plano viral em 7 dias</span>
-          <span className="topbar-cta-label-short">Plano viral</span>
-        </button>
-        {showSoon && (
-          <div className="topbar-cta-toast" role="status">Em breve</div>
-        )}
-      </div>
+      <div className="left" />
       <div className="right">
         <div className="topbar-credits" title={`${user.credits ?? 0} créditos disponíveis`}>
           <Zap size={13} />

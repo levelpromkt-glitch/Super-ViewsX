@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowUpRight, Trophy, TrendingUp, Flame, Settings, Sparkles, Link2, Send, Heart, Wand2, BarChart3 } from "lucide-react";
+import { Trophy, TrendingUp, Flame, Settings, Sparkles, Link2, Send, Heart, Wand2, BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 // Ícone customizado para Transcrição (balão de fala com caractere)
@@ -113,22 +113,6 @@ export function Sidebar({
           );
         })}
       </nav>
-      <div className="sidebar-upgrade-card">
-        <p className="upgrade-title relative z-10 flex items-center gap-1.5">
-          <Flame size={16} className="text-orange-500 animate-pulse" />
-          Desbloqueie o <span className="highlight font-bold text-white">PRO</span>
-        </p>
-        <p className="upgrade-text relative z-10 opacity-80 text-[11px] mb-3">
-          Acesso a ferramentas avançadas e recursos sem limites.
-        </p>
-        <Link 
-          to="/dashboard/planos" 
-          onClick={onCloseMobile}
-          className="btn-upgrade"
-        >
-          Ver Planos <ArrowUpRight size={14} />
-        </Link>
-      </div>
     </aside>
   );
 }
