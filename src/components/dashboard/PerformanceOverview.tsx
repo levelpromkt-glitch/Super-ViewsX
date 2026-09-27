@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import { Eye, Trophy, Link2, ExternalLink, RefreshCw, Loader2, ListVideo, Users2 } from "lucide-react";
+import { Eye, Trophy, Link2, RefreshCw, Loader2, ListVideo, Users2 } from "lucide-react";
 import {
   PerformanceService,
   PerformanceError,
   PerformanceOverview as PerformanceData,
   PerformancePeriod,
-  PerformancePost,
 } from "@/services/performanceService";
 
 function formatNumber(n: number) {
@@ -38,32 +37,6 @@ function PlatformTag({ platform }: { platform: string }) {
       <span className="ps-platform-dot" style={{ background: PLATFORM_COLORS[platform] || "var(--text-muted)" }} />
       {PLATFORM_LABELS[platform] || platform}
     </span>
-  );
-}
-
-function PostTableRows({ posts, ranked }: { posts: PerformancePost[]; ranked?: boolean }) {
-  return (
-    <>
-      {posts.map((p, i) => (
-        <tr key={`${p.url}-${i}`}>
-          {ranked && <td style={{ width: 28, color: "var(--primary-lime)", fontWeight: 700 }}>{i + 1}</td>}
-          <td>
-            <div className="admin-cell-name" style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {p.title}
-            </div>
-          </td>
-          <td><PlatformTag platform={p.platform} /></td>
-          <td style={{ textAlign: "right", fontWeight: 700 }}>{formatNumber(p.views)}</td>
-          <td className="admin-col-actions">
-            {p.url && (
-              <a href={p.url} target="_blank" rel="noreferrer" className="admin-icon-btn" title="Ver post" aria-label="Ver post">
-                <ExternalLink size={14} />
-              </a>
-            )}
-          </td>
-        </tr>
-      ))}
-    </>
   );
 }
 
@@ -220,50 +193,54 @@ export function PerformanceOverview() {
         </div>
       </div>
 
-      <div className="ps-grid-2">
-        <div className="ps-section" style={{ marginBottom: 0 }}>
-          <h3 className="ps-section-title"><Trophy size={14} className="tr-icon-lime" /> Top 5 do período</h3>
-          {top5.length > 0 ? (
-            <div className="ps-table-scroll">
-              <table className="admin-table">
-                <tbody>
-                  <PostTableRows posts={top5} ranked />
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="ps-empty">Nenhum post nesse período.</p>
-          )}
-        </div>
-
-        {accountId === "all" && byAccountSorted.length > 1 ? (
-          <div className="ps-section" style={{ marginBottom: 0 }}>
-            <h3 className="ps-section-title"><Users2 size={14} className="tr-icon-lime" /> Por conta</h3>
-            <div className="ps-table-scroll">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Conta</th>
-                    <th>Rede</th>
-                    <th style={{ textAlign: "right" }}>Views</th>
-                    <th style={{ textAlign: "right" }}>Posts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byAccountSorted.map((a) => (
-                    <tr key={a.accountId}>
-                      <td className="admin-cell-name">{a.label}</td>
-                      <td><PlatformTag platform={a.platform} /></td>
-                      <td style={{ textAlign: "right", fontWeight: 700 }}>{formatNumber(a.views)}</td>
-                      <td style={{ textAlign: "right" }} className="admin-cell-sub">{a.posts}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <div className="ps-section">
+        <h3 className="ps-section-title"><Trophy size={14} className="tr-icon-lime" /> Top 5 do período</h3>
+        {top5.length > 0 ? (
+          <div className="ps-top-grid">
+            {top5.map((p, i) => (
+              <a key={`${p.url}-${i}`} href={p.url || undefined} target="_blank" rel="noreferrer" className="ps-top-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span className="ps-top-rank">{i + 1}</span>
+                  <PlatformTag platform={p.platform} />
+                </div>
+                <div className="ps-top-views">{formatNumber(p.views)}</div>
+                <span className="ps-top-views-label">views</span>
+                <p className="ps-top-title">{p.title}</p>
+              </a>
+            ))}
           </div>
-        ) : null}
+        ) : (
+          <p className="ps-empty">Nenhum post nesse período.</p>
+        )}
       </div>
+
+      {accountId === "all" && byAccountSorted.length > 1 ? (
+        <div className="ps-section" style={{ marginBottom: 0 }}>
+          <h3 className="ps-section-title"><Users2 size={14} className="tr-icon-lime" /> Por conta</h3>
+          <div className="ps-table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Conta</th>
+                  <th>Rede</th>
+                  <th style={{ textAlign: "right" }}>Views</th>
+                  <th style={{ textAlign: "right" }}>Posts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byAccountSorted.map((a) => (
+                  <tr key={a.accountId}>
+                    <td className="admin-cell-name">{a.label}</td>
+                    <td><PlatformTag platform={a.platform} /></td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{formatNumber(a.views)}</td>
+                    <td style={{ textAlign: "right" }} className="admin-cell-sub">{a.posts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {error && <div className="tr-error" style={{ marginTop: 12, fontSize: ".78rem" }}>{error}</div>}
     </div>
