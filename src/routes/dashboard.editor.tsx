@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Loader2, Palette, Wand2 } from "lucide-react";
+import { Download, Film, Loader2, MessageSquareText, Palette, Scissors, Type, Wand2 } from "lucide-react";
 
 type EditorSearch = { clipId?: string };
 
@@ -17,10 +17,25 @@ import { ViralMomentsService, ViralMomentsError } from "@/services/viralMomentsS
 import { CaptionEditorService, CaptionEditorError, CaptionWord } from "@/services/captionEditorService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 import { CaptionPreview, groupIntoChunks } from "@/components/editor/CaptionPreview";
-import { CutTimeline, Cut } from "@/components/editor/CutTimeline";
+import { CutTimeline, Cut, formatTime } from "@/components/editor/CutTimeline";
+import { CaptionTrack } from "@/components/editor/CaptionTrack";
 import { WordList } from "@/components/editor/WordList";
 
 const TEMPLATES = [{ id: "karaoke-yellow", label: "Karaokê" }];
+
+function TimeRuler({ durationSec }: { durationSec: number }) {
+  const step = durationSec > 120 ? 30 : durationSec > 60 ? 15 : durationSec > 20 ? 5 : 2;
+  const marks: number[] = [];
+  for (let t = 0; t <= durationSec; t += step) marks.push(t);
+  const pct = (t: number) => (durationSec > 0 ? (t / durationSec) * 100 : 0);
+  return (
+    <div className="ed-ruler">
+      {marks.map((t) => (
+        <span key={t} style={{ left: `${pct(t)}%` }}>{formatTime(t)}</span>
+      ))}
+    </div>
+  );
+}
 
 function readVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -296,12 +311,8 @@ function EditorPage() {
       </section>
 
       {sourceVideoUrl && durationSec && words && (
-        <section className="tr-card tr-fade">
-          <div className="tr-card-head">
-            <Palette size={18} className="tr-icon-lime" />
-            <h2>Editar</h2>
-          </div>
-          <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="ed-workspace">
+          <div className="ed-main">
             <CaptionPreview
               videoUrl={sourceVideoUrl}
               chunks={chunks}
@@ -311,17 +322,50 @@ function EditorPage() {
               videoRef={videoRef}
             />
 
-            <CutTimeline
-              durationSec={durationSec}
-              currentTime={currentTime}
-              cuts={cuts}
-              onSeek={handleSeek}
-              onAddCut={handleAddCut}
-              onUpdateCut={handleUpdateCut}
-              onRemoveCut={handleRemoveCut}
-            />
+            <div className="ed-timeline-panel">
+              <div className="ed-timeline-toolbar">
+                <span className="tr-muted" style={{ fontSize: ".78rem" }}>
+                  {cuts.length > 0 ? `${cuts.length} corte${cuts.length > 1 ? "s" : ""}` : "Nenhum corte"}
+                </span>
+                <button type="button" className="hs-btn-ghost" onClick={handleAddCut}>
+                  <Scissors size={12} /> Cortar aqui
+                </button>
+              </div>
 
-            <WordList words={words} currentTime={currentTime} cuts={cuts} onSeek={handleSeek} />
+              <TimeRuler durationSec={durationSec} />
+
+              <div className="ed-track-row">
+                <span className="ed-track-label"><Film size={13} /> Vídeo</span>
+                <div className="ed-track-body">
+                  <CutTimeline
+                    durationSec={durationSec}
+                    currentTime={currentTime}
+                    cuts={cuts}
+                    onSeek={handleSeek}
+                    onUpdateCut={handleUpdateCut}
+                    onRemoveCut={handleRemoveCut}
+                  />
+                </div>
+              </div>
+
+              <div className="ed-track-row">
+                <span className="ed-track-label"><Type size={13} /> Legenda</span>
+                <div className="ed-track-body">
+                  <CaptionTrack durationSec={durationSec} chunks={chunks} currentTime={currentTime} onSeek={handleSeek} />
+                </div>
+              </div>
+            </div>
+
+            <div className="ps-section" style={{ margin: 0 }}>
+              <h3 className="ps-section-title" style={{ fontSize: ".8rem" }}>
+                <MessageSquareText size={14} className="tr-icon-lime" /> Transcrição
+              </h3>
+              <WordList words={words} currentTime={currentTime} cuts={cuts} onSeek={handleSeek} />
+            </div>
+          </div>
+
+          <aside className="ed-inspector">
+            <h3 className="ed-inspector-title"><Palette size={16} className="tr-icon-lime" /> Estilo</h3>
 
             <div className="tr-field">
               <label className="hs-label">Modelo de legenda</label>
@@ -332,31 +376,30 @@ function EditorPage() {
               </select>
             </div>
 
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <div className="tr-field" style={{ flex: "none" }}>
-                <label className="hs-label">Cor de destaque</label>
-                <input
-                  type="color"
-                  value={accentColor}
-                  onChange={(e) => setAccentColor(e.target.value)}
-                  style={{ width: 60, height: 40, padding: 2, borderRadius: 8, border: "1px solid var(--border-soft)" }}
-                />
-              </div>
-              <div className="tr-field" style={{ flex: 1, minWidth: 220 }}>
-                <label className="hs-label">Logo (URL da imagem, opcional)</label>
-                <input
-                  type="text"
-                  className="tr-input"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://..."
-                />
-              </div>
+            <div className="tr-field">
+              <label className="hs-label">Cor de destaque</label>
+              <input
+                type="color"
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+                style={{ width: "100%", height: 40, padding: 2, borderRadius: 8, border: "1px solid var(--border-soft)" }}
+              />
             </div>
 
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".82rem", color: "var(--text-secondary)" }}>
+            <div className="tr-field">
+              <label className="hs-label">Logo (URL da imagem, opcional)</label>
+              <input
+                type="text"
+                className="tr-input"
+                value={logoUrl}
+                onChange={(e) => setLogoUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".8rem", color: "var(--text-secondary)" }}>
               <input type="checkbox" checked={saveAsDefault} onChange={(e) => setSaveAsDefault(e.target.checked)} />
-              Salvar como padrão do meu Brand Kit
+              Salvar como padrão do Brand Kit
             </label>
 
             {rendering && (
@@ -378,8 +421,8 @@ function EditorPage() {
                 </>
               )}
             </button>
-          </div>
-        </section>
+          </aside>
+        </div>
       )}
 
       {resultUrl && (

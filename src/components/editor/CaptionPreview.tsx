@@ -52,7 +52,7 @@ export function CaptionPreview({
         ref={videoRef}
         src={videoUrl}
         controls
-        style={{ width: "100%", maxHeight: 420, display: "block" }}
+        style={{ width: "100%", maxHeight: 520, display: "block", background: "#000" }}
         onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
       />
       {activeChunk && (
