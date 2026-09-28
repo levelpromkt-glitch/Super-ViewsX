@@ -12,16 +12,15 @@ export const Route = createFileRoute("/dashboard/editor")({
 });
 
 import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
-import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
+import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
 import { ViralMomentsService, ViralMomentsError } from "@/services/viralMomentsService";
 import { CaptionEditorService, CaptionEditorError, CaptionWord } from "@/services/captionEditorService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 import { CaptionPreview, groupIntoChunks } from "@/components/editor/CaptionPreview";
-import { TrimTimeline } from "@/components/editor/TrimTimeline";
+import { CutTimeline, Cut } from "@/components/editor/CutTimeline";
 import { WordList } from "@/components/editor/WordList";
 
 const TEMPLATES = [{ id: "karaoke-yellow", label: "Karaokê" }];
-const MIN_TRIM_GAP = 0.2;
 
 function readVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -34,6 +33,26 @@ function readVideoDuration(file: File): Promise<number> {
     video.onerror = () => reject(new Error("Não foi possível ler o vídeo."));
     video.src = URL.createObjectURL(file);
   });
+}
+
+// The complement of the marked cuts within [0, durationSec] — what actually
+// survives into the final render, in original-video time.
+function computeKeptSegments(durationSec: number, cuts: Cut[]): { start: number; end: number }[] {
+  const sorted = cuts.map((c) => ({ start: c.start, end: c.end })).sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const c of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last || c.start > last.end) merged.push({ ...c });
+    else last.end = Math.max(last.end, c.end);
+  }
+  const kept: { start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const c of merged) {
+    if (c.start > cursor) kept.push({ start: cursor, end: c.start });
+    cursor = Math.max(cursor, c.end);
+  }
+  if (cursor < durationSec) kept.push({ start: cursor, end: durationSec });
+  return kept;
 }
 
 function EditorPage() {
@@ -49,14 +68,7 @@ function EditorPage() {
   const [durationSec, setDurationSec] = useState<number | null>(null);
   const [words, setWords] = useState<CaptionWord[] | null>(null);
 
-  // What to re-cut against if the user trims — the original clippable
-  // source (a YouTube videoId or an R2 key) plus where the currently loaded
-  // preview starts within it. A Biblioteca clip already starts partway into
-  // its source video; a fresh upload starts at 0.
-  const [sourceForTrim, setSourceForTrim] = useState<ClipSource | null>(null);
-  const [baseStart, setBaseStart] = useState(0);
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
+  const [cuts, setCuts] = useState<Cut[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
 
   const [template, setTemplate] = useState(TEMPLATES[0].id);
@@ -84,26 +96,19 @@ function EditorPage() {
     setSourceVideoUrl(null);
     setDurationSec(null);
     setWords(null);
-    setSourceForTrim(null);
-    setBaseStart(0);
-    setTrimStart(0);
-    setTrimEnd(0);
+    setCuts([]);
     setCurrentTime(0);
     setResultUrl(null);
     setError(null);
   };
 
-  const prepareFromUrl = async (url: string, duration: number, source: ClipSource, base: number) => {
+  const prepareFromUrl = async (url: string, duration: number) => {
     setLoadingStatus("Transcrevendo o áudio...");
     const { words: transcribedWords, videoDurationSec } = await CaptionEditorService.transcribeSourceUrl(url);
-    const finalDuration = videoDurationSec || duration;
     setSourceVideoUrl(url);
-    setDurationSec(finalDuration);
+    setDurationSec(videoDurationSec || duration);
     setWords(transcribedWords);
-    setSourceForTrim(source);
-    setBaseStart(base);
-    setTrimStart(0);
-    setTrimEnd(finalDuration);
+    setCuts([]);
     setCurrentTime(0);
   };
 
@@ -118,7 +123,7 @@ function EditorPage() {
         const clip = await SavedClipsService.get(clipId);
         setLoadingStatus("Cortando o vídeo...");
         const url = await ClipDownloadService.getClipDownloadUrl(clip.source, clip.start_sec, clip.end_sec);
-        await prepareFromUrl(url, clip.end_sec - clip.start_sec, clip.source, clip.start_sec);
+        await prepareFromUrl(url, clip.end_sec - clip.start_sec);
       } catch (err: any) {
         setError(err instanceof SavedClipsError || err instanceof ClipDownloadError || err instanceof CaptionEditorError
           ? err.message
@@ -143,9 +148,8 @@ function EditorPage() {
       const duration = await readVideoDuration(file);
       const key = await ViralMomentsService.uploadSourceVideoToR2(file);
       setLoadingStatus("Preparando o corte...");
-      const source: ClipSource = { r2Key: key };
-      const url = await ClipDownloadService.getClipDownloadUrl(source, 0, Math.ceil(duration));
-      await prepareFromUrl(url, duration, source, 0);
+      const url = await ClipDownloadService.getClipDownloadUrl({ r2Key: key }, 0, Math.ceil(duration));
+      await prepareFromUrl(url, duration);
     } catch (err: any) {
       setError(err instanceof ViralMomentsError || err instanceof ClipDownloadError || err instanceof CaptionEditorError
         ? err.message
@@ -161,13 +165,37 @@ function EditorPage() {
     setCurrentTime(t);
   };
 
-  const handleTrimChange = (start: number, end: number) => {
-    setTrimStart(start);
-    setTrimEnd(end);
+  // Ripple preview: while playing, jump over any marked cut instead of
+  // actually showing it, so what you watch already looks like the edit.
+  const handleTimeUpdate = (t: number) => {
+    const activeCut = cuts.find((c) => t >= c.start && t < c.end);
+    if (activeCut) {
+      if (videoRef.current) videoRef.current.currentTime = activeCut.end;
+      setCurrentTime(activeCut.end);
+      return;
+    }
+    setCurrentTime(t);
+  };
+
+  const handleAddCut = () => {
+    if (!durationSec) return;
+    const width = Math.min(2, Math.max(0.6, durationSec * 0.08));
+    const start = Math.max(0, currentTime - width / 2);
+    const end = Math.min(durationSec, currentTime + width / 2);
+    if (end - start < 0.3) return;
+    setCuts((prev) => [...prev, { id: crypto.randomUUID(), start, end }]);
+  };
+
+  const handleUpdateCut = (id: string, start: number, end: number) => {
+    setCuts((prev) => prev.map((c) => (c.id === id ? { ...c, start, end } : c)));
+  };
+
+  const handleRemoveCut = (id: string) => {
+    setCuts((prev) => prev.filter((c) => c.id !== id));
   };
 
   const handleGenerate = async () => {
-    if (!sourceVideoUrl || !words || !durationSec || !sourceForTrim) return;
+    if (!sourceVideoUrl || !words || !durationSec) return;
     setRendering(true);
     setResultUrl(null);
     setError(null);
@@ -176,18 +204,36 @@ function EditorPage() {
         await CaptionEditorService.saveBrandKit({ accent_color: accentColor, logo_r2_key: logoUrl || null, default_template: template });
       }
 
-      const isTrimmed = trimStart > MIN_TRIM_GAP / 2 || trimEnd < durationSec - MIN_TRIM_GAP / 2;
       let renderUrl = sourceVideoUrl;
       let renderWords = words;
       let renderDuration = durationSec;
 
-      if (isTrimmed) {
-        setLoadingStatus("Cortando o trecho selecionado...");
-        renderUrl = await ClipDownloadService.getClipDownloadUrl(sourceForTrim, baseStart + trimStart, baseStart + trimEnd);
-        renderWords = words
-          .filter((w) => w.end > trimStart && w.start < trimEnd)
-          .map((w) => ({ word: w.word, start: Math.max(0, w.start - trimStart), end: Math.max(0, w.end - trimStart) }));
-        renderDuration = trimEnd - trimStart;
+      if (cuts.length > 0) {
+        const keptSegments = computeKeptSegments(durationSec, cuts);
+        if (keptSegments.length === 0) {
+          setError("Você removeu o vídeo inteiro — desfaça algum corte antes de gerar.");
+          return;
+        }
+        setLoadingStatus("Aplicando os cortes...");
+        renderUrl = await ClipDownloadService.getSegmentsDownloadUrl(sourceVideoUrl, keptSegments);
+
+        let cursor = 0;
+        const mapped: CaptionWord[] = [];
+        for (const seg of keptSegments) {
+          for (const w of words) {
+            const mid = (w.start + w.end) / 2;
+            if (mid >= seg.start && mid < seg.end) {
+              mapped.push({
+                word: w.word,
+                start: Math.max(0, w.start - seg.start) + cursor,
+                end: Math.max(0, w.end - seg.start) + cursor,
+              });
+            }
+          }
+          cursor += seg.end - seg.start;
+        }
+        renderWords = mapped;
+        renderDuration = cursor;
       }
 
       setLoadingStatus("Iniciando renderização...");
@@ -217,7 +263,7 @@ function EditorPage() {
             <Wand2 size={16} className="tr-icon-lime" />
             <span>Editor</span>
           </div>
-          <h2 className="tr-input-title">Legenda automática queimada</h2>
+          <h2 className="tr-input-title">Editor de cortes e legenda automática</h2>
           <p className="tr-input-hint">
             Envie um vídeo do seu computador, ou volte na Biblioteca e clique em "Editar" num corte salvo.
           </p>
@@ -253,7 +299,7 @@ function EditorPage() {
         <section className="tr-card tr-fade">
           <div className="tr-card-head">
             <Palette size={18} className="tr-icon-lime" />
-            <h2>Estilo</h2>
+            <h2>Editar</h2>
           </div>
           <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
             <CaptionPreview
@@ -261,20 +307,21 @@ function EditorPage() {
               chunks={chunks}
               currentTime={currentTime}
               accentColor={accentColor}
-              onTimeUpdate={setCurrentTime}
+              onTimeUpdate={handleTimeUpdate}
               videoRef={videoRef}
             />
 
-            <TrimTimeline
+            <CutTimeline
               durationSec={durationSec}
               currentTime={currentTime}
-              trimStart={trimStart}
-              trimEnd={trimEnd}
+              cuts={cuts}
               onSeek={handleSeek}
-              onTrimChange={handleTrimChange}
+              onAddCut={handleAddCut}
+              onUpdateCut={handleUpdateCut}
+              onRemoveCut={handleRemoveCut}
             />
 
-            <WordList words={words} currentTime={currentTime} trimStart={trimStart} trimEnd={trimEnd} onSeek={handleSeek} />
+            <WordList words={words} currentTime={currentTime} cuts={cuts} onSeek={handleSeek} />
 
             <div className="tr-field">
               <label className="hs-label">Modelo de legenda</label>

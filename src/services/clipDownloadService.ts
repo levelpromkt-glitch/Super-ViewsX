@@ -48,6 +48,40 @@ export const ClipDownloadService = {
     return payload.downloadUrl as string;
   },
 
+  // Cuts OUT the given ranges from an already-loaded video URL (e.g. the
+  // Editor removing a piece from the middle) and joins what's left — used
+  // instead of getClipDownloadUrl whenever the user has more than one kept
+  // range, since that endpoint only supports a single start/end.
+  async getSegmentsDownloadUrl(sourceUrl: string, segments: { start: number; end: number }[]): Promise<string> {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token || anonKey;
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/clip-segments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "apikey": anonKey,
+        "authorization": `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ sourceUrl, segments }),
+    });
+
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // keep payload null, handled below
+    }
+
+    if (!response.ok || !payload?.success || !payload?.downloadUrl) {
+      throw new ClipDownloadError(payload?.message || "Não foi possível cortar o vídeo.", payload?.code || "CLIP_FAILED");
+    }
+    return payload.downloadUrl as string;
+  },
+
   async downloadClip(
     source: ClipSource,
     start: number,

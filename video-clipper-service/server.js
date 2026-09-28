@@ -121,12 +121,101 @@ async function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
   });
 }
 
+// Cuts one [s, e) range from sourceUrl with a plain stream copy (no re-encode).
+function runFfmpegCut(sourceUrl, s, e, outputPath) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn("ffmpeg", [
+      "-y", "-ss", String(s), "-i", sourceUrl, "-t", String(e - s),
+      "-c", "copy", "-avoid_negative_ts", "make_zero", outputPath,
+    ], { timeout: PROCESS_TIMEOUT_MS });
+    let stderr = "";
+    ff.stderr.on("data", (d) => { stderr += d.toString(); });
+    ff.on("error", reject);
+    ff.on("close", (code) => {
+      if (code !== 0 || !fs.existsSync(outputPath)) {
+        reject(new Error(stderr.slice(-2000) || `ffmpeg exited ${code}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+// The Editor's "remove a piece from the middle" feature: cuts each KEPT
+// range (the complement of whatever the user marked for removal) to its own
+// temp file, then joins them with ffmpeg's concat demuxer — still a stream
+// copy throughout, no re-encode. Only supported against an already-resolved
+// sourceUrl (which is all the Editor ever deals with by the time it renders,
+// regardless of whether the clip originally came from YouTube or an upload).
+async function handleSegmentedClip(req, res, sourceUrl, segments, vertical) {
+  const clean = segments
+    .map((seg) => ({ start: Number(seg?.start), end: Number(seg?.end) }))
+    .filter((seg) => Number.isFinite(seg.start) && Number.isFinite(seg.end) && seg.start >= 0 && seg.end > seg.start)
+    .sort((a, b) => a.start - b.start);
+
+  if (clean.length === 0) {
+    return res.status(400).json({ error: "INVALID_RANGE" });
+  }
+  const totalDuration = clean.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+  if (totalDuration > MAX_CLIP_SECONDS) {
+    return res.status(400).json({
+      error: "CLIP_TOO_LONG",
+      message: `Clipes de no máximo ${MAX_CLIP_SECONDS}s.`,
+    });
+  }
+
+  const jobId = crypto.randomBytes(8).toString("hex");
+  const tmpDir = path.join(os.tmpdir(), `clip-${jobId}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  try {
+    const partPaths = [];
+    for (let i = 0; i < clean.length; i++) {
+      const partPath = path.join(tmpDir, `part-${i}.mp4`);
+      await runFfmpegCut(sourceUrl, clean[i].start, clean[i].end, partPath);
+      partPaths.push(partPath);
+    }
+
+    if (partPaths.length === 1) {
+      finishClip(res, tmpDir, partPaths[0], vertical, `clip-segments-${jobId}`);
+      return;
+    }
+
+    const listPath = path.join(tmpDir, "concat.txt");
+    fs.writeFileSync(listPath, partPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
+
+    const outputPath = path.join(tmpDir, "clip.mp4");
+    await new Promise((resolve, reject) => {
+      const ff = spawn("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outputPath], { timeout: PROCESS_TIMEOUT_MS });
+      let stderr = "";
+      ff.stderr.on("data", (d) => { stderr += d.toString(); });
+      ff.on("error", reject);
+      ff.on("close", (code) => {
+        if (code !== 0 || !fs.existsSync(outputPath)) reject(new Error(stderr.slice(-2000) || `ffmpeg concat exited ${code}`));
+        else resolve();
+      });
+    });
+
+    finishClip(res, tmpDir, outputPath, vertical, `clip-segments-${jobId}`);
+  } catch (err) {
+    console.error("segmented clip failed", err);
+    cleanup(tmpDir);
+    if (!res.headersSent) {
+      res.status(502).json({ error: "DOWNLOAD_FAILED", message: "Não foi possível cortar o vídeo com os segmentos selecionados." });
+    }
+  }
+}
+
 app.post("/clip", (req, res) => {
   if (API_KEY && req.get("x-api-key") !== API_KEY) {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
 
-  const { videoId, sourceUrl, start, end, vertical } = req.body || {};
+  const { videoId, sourceUrl, start, end, vertical, segments } = req.body || {};
+
+  if (typeof sourceUrl === "string" && sourceUrl.startsWith("http") && Array.isArray(segments) && segments.length > 0) {
+    return handleSegmentedClip(req, res, sourceUrl, segments, vertical);
+  }
 
   const s = Number(start);
   const e = Number(end);

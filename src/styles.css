@@ -523,9 +523,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .ed-caption-line { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; background: rgba(0,0,0,.68); padding: 8px 16px; border-radius: 10px; max-width: 100%; }
 .ed-caption-word { font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: -.01em; }
 .ed-timeline-track { position: relative; height: 40px; background: rgba(255,255,255,.04); border-radius: 8px; cursor: pointer; margin: 0 6px; }
-.ed-timeline-dim { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.55); border-radius: 8px; pointer-events: none; }
-.ed-timeline-trim { position: absolute; top: 0; bottom: 0; background: rgba(158,255,46,.15); border-top: 2px solid var(--primary-lime); border-bottom: 2px solid var(--primary-lime); pointer-events: none; }
+.ed-timeline-cut-zone { position: absolute; top: 0; bottom: 0; background: rgba(255,60,60,.18); border-top: 2px solid #FF6B6B; border-bottom: 2px solid #FF6B6B; pointer-events: none; }
 .ed-timeline-handle { position: absolute; top: -4px; bottom: -4px; width: 10px; margin-left: -5px; background: var(--primary-lime); border-radius: 4px; cursor: ew-resize; z-index: 2; }
+.ed-timeline-handle.cut { background: #FF6B6B; }
+.ed-timeline-cut-remove { position: absolute; top: -22px; width: 18px; height: 18px; margin-left: -9px; border-radius: 999px; background: #FF6B6B; color: #fff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 4; padding: 0; }
+.ed-timeline-cut-remove:hover { background: #ff8a8a; }
 .ed-timeline-playhead { position: absolute; top: -6px; bottom: -6px; width: 2px; background: #fff; z-index: 3; pointer-events: none; }
 .ed-timeline-labels { display: flex; justify-content: space-between; font-size: .7rem; color: var(--text-muted); margin-top: 8px; }
 .ed-words { display: flex; flex-wrap: wrap; gap: 4px; max-height: 160px; overflow-y: auto; padding: 10px; background: rgba(255,255,255,.02); border: 1px solid var(--border-soft); border-radius: 10px; }
