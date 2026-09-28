@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { Download, Loader2, Palette, Upload, Wand2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, Loader2, Palette, Wand2 } from "lucide-react";
 
 type EditorSearch = { clipId?: string };
 
@@ -12,12 +12,16 @@ export const Route = createFileRoute("/dashboard/editor")({
 });
 
 import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
-import { ClipDownloadService, ClipDownloadError } from "@/services/clipDownloadService";
+import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/clipDownloadService";
 import { ViralMomentsService, ViralMomentsError } from "@/services/viralMomentsService";
 import { CaptionEditorService, CaptionEditorError, CaptionWord } from "@/services/captionEditorService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
+import { CaptionPreview, groupIntoChunks } from "@/components/editor/CaptionPreview";
+import { TrimTimeline } from "@/components/editor/TrimTimeline";
+import { WordList } from "@/components/editor/WordList";
 
 const TEMPLATES = [{ id: "karaoke-yellow", label: "Karaokê" }];
+const MIN_TRIM_GAP = 0.2;
 
 function readVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -35,6 +39,7 @@ function readVideoDuration(file: File): Promise<number> {
 function EditorPage() {
   const { clipId } = Route.useSearch();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
@@ -44,6 +49,16 @@ function EditorPage() {
   const [durationSec, setDurationSec] = useState<number | null>(null);
   const [words, setWords] = useState<CaptionWord[] | null>(null);
 
+  // What to re-cut against if the user trims — the original clippable
+  // source (a YouTube videoId or an R2 key) plus where the currently loaded
+  // preview starts within it. A Biblioteca clip already starts partway into
+  // its source video; a fresh upload starts at 0.
+  const [sourceForTrim, setSourceForTrim] = useState<ClipSource | null>(null);
+  const [baseStart, setBaseStart] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
   const [template, setTemplate] = useState(TEMPLATES[0].id);
   const [accentColor, setAccentColor] = useState("#FFD400");
   const [logoUrl, setLogoUrl] = useState("");
@@ -51,6 +66,8 @@ function EditorPage() {
 
   const [rendering, setRendering] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+
+  const chunks = useMemo(() => (words ? groupIntoChunks(words) : []), [words]);
 
   useEffect(() => {
     CaptionEditorService.getBrandKit()
@@ -67,16 +84,27 @@ function EditorPage() {
     setSourceVideoUrl(null);
     setDurationSec(null);
     setWords(null);
+    setSourceForTrim(null);
+    setBaseStart(0);
+    setTrimStart(0);
+    setTrimEnd(0);
+    setCurrentTime(0);
     setResultUrl(null);
     setError(null);
   };
 
-  const prepareFromUrl = async (url: string, duration: number) => {
+  const prepareFromUrl = async (url: string, duration: number, source: ClipSource, base: number) => {
     setLoadingStatus("Transcrevendo o áudio...");
     const { words: transcribedWords, videoDurationSec } = await CaptionEditorService.transcribeSourceUrl(url);
+    const finalDuration = videoDurationSec || duration;
     setSourceVideoUrl(url);
-    setDurationSec(videoDurationSec || duration);
+    setDurationSec(finalDuration);
     setWords(transcribedWords);
+    setSourceForTrim(source);
+    setBaseStart(base);
+    setTrimStart(0);
+    setTrimEnd(finalDuration);
+    setCurrentTime(0);
   };
 
   // Loaded via ?clipId=... from the Biblioteca "Editar" link.
@@ -90,7 +118,7 @@ function EditorPage() {
         const clip = await SavedClipsService.get(clipId);
         setLoadingStatus("Cortando o vídeo...");
         const url = await ClipDownloadService.getClipDownloadUrl(clip.source, clip.start_sec, clip.end_sec);
-        await prepareFromUrl(url, clip.end_sec - clip.start_sec);
+        await prepareFromUrl(url, clip.end_sec - clip.start_sec, clip.source, clip.start_sec);
       } catch (err: any) {
         setError(err instanceof SavedClipsError || err instanceof ClipDownloadError || err instanceof CaptionEditorError
           ? err.message
@@ -115,8 +143,9 @@ function EditorPage() {
       const duration = await readVideoDuration(file);
       const key = await ViralMomentsService.uploadSourceVideoToR2(file);
       setLoadingStatus("Preparando o corte...");
-      const url = await ClipDownloadService.getClipDownloadUrl({ r2Key: key }, 0, Math.ceil(duration));
-      await prepareFromUrl(url, duration);
+      const source: ClipSource = { r2Key: key };
+      const url = await ClipDownloadService.getClipDownloadUrl(source, 0, Math.ceil(duration));
+      await prepareFromUrl(url, duration, source, 0);
     } catch (err: any) {
       setError(err instanceof ViralMomentsError || err instanceof ClipDownloadError || err instanceof CaptionEditorError
         ? err.message
@@ -127,8 +156,18 @@ function EditorPage() {
     }
   };
 
+  const handleSeek = (t: number) => {
+    if (videoRef.current) videoRef.current.currentTime = t;
+    setCurrentTime(t);
+  };
+
+  const handleTrimChange = (start: number, end: number) => {
+    setTrimStart(start);
+    setTrimEnd(end);
+  };
+
   const handleGenerate = async () => {
-    if (!sourceVideoUrl || !words || !durationSec) return;
+    if (!sourceVideoUrl || !words || !durationSec || !sourceForTrim) return;
     setRendering(true);
     setResultUrl(null);
     setError(null);
@@ -136,11 +175,26 @@ function EditorPage() {
       if (saveAsDefault) {
         await CaptionEditorService.saveBrandKit({ accent_color: accentColor, logo_r2_key: logoUrl || null, default_template: template });
       }
+
+      const isTrimmed = trimStart > MIN_TRIM_GAP / 2 || trimEnd < durationSec - MIN_TRIM_GAP / 2;
+      let renderUrl = sourceVideoUrl;
+      let renderWords = words;
+      let renderDuration = durationSec;
+
+      if (isTrimmed) {
+        setLoadingStatus("Cortando o trecho selecionado...");
+        renderUrl = await ClipDownloadService.getClipDownloadUrl(sourceForTrim, baseStart + trimStart, baseStart + trimEnd);
+        renderWords = words
+          .filter((w) => w.end > trimStart && w.start < trimEnd)
+          .map((w) => ({ word: w.word, start: Math.max(0, w.start - trimStart), end: Math.max(0, w.end - trimStart) }));
+        renderDuration = trimEnd - trimStart;
+      }
+
       setLoadingStatus("Iniciando renderização...");
       const jobId = await CaptionEditorService.startRender({
-        sourceVideoUrl,
-        words,
-        durationSec,
+        sourceVideoUrl: renderUrl,
+        words: renderWords,
+        durationSec: renderDuration,
         accentColor,
         logoUrl: logoUrl || undefined,
         template,
@@ -148,7 +202,7 @@ function EditorPage() {
       const url = await CaptionEditorService.pollRenderJob(jobId, () => setLoadingStatus("Renderizando legenda..."));
       setResultUrl(url);
     } catch (err: any) {
-      setError(err instanceof CaptionEditorError ? err.message : "Erro inesperado ao renderizar.");
+      setError(err instanceof CaptionEditorError || err instanceof ClipDownloadError ? err.message : "Erro inesperado ao renderizar.");
     } finally {
       setRendering(false);
       setLoadingStatus("");
@@ -202,7 +256,25 @@ function EditorPage() {
             <h2>Estilo</h2>
           </div>
           <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <video src={sourceVideoUrl} controls style={{ width: "100%", maxHeight: 420, borderRadius: 12 }} />
+            <CaptionPreview
+              videoUrl={sourceVideoUrl}
+              chunks={chunks}
+              currentTime={currentTime}
+              accentColor={accentColor}
+              onTimeUpdate={setCurrentTime}
+              videoRef={videoRef}
+            />
+
+            <TrimTimeline
+              durationSec={durationSec}
+              currentTime={currentTime}
+              trimStart={trimStart}
+              trimEnd={trimEnd}
+              onSeek={handleSeek}
+              onTrimChange={handleTrimChange}
+            />
+
+            <WordList words={words} currentTime={currentTime} trimStart={trimStart} trimEnd={trimEnd} onSeek={handleSeek} />
 
             <div className="tr-field">
               <label className="hs-label">Modelo de legenda</label>
