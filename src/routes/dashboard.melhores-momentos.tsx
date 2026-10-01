@@ -38,6 +38,12 @@ const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "120-180", label: "2 a 3 minutos" },
 ];
 
+const SCORE_FILTERS: { value: number; label: string }[] = [
+  { value: 0, label: "Todos" },
+  { value: 70, label: "70+ viral" },
+  { value: 85, label: "85+ altamente viral" },
+];
+
 const PROFILE_LABELS: Record<NarrativeProfile, string> = {
   fast_answer: "Resposta rápida",
   contrarian: "Contraintuitivo",
@@ -178,10 +184,6 @@ function MelhoresMomentosPage() {
   const dragCounterRef = useRef(0);
   const [pastedTranscript, setPastedTranscript] = useState("");
   const [storagePath, setStoragePath] = useState<string | null>(null);
-  const uploadObjectUrl = useMemo(() => (uploadFile ? URL.createObjectURL(uploadFile) : null), [uploadFile]);
-  useEffect(() => {
-    return () => { if (uploadObjectUrl) URL.revokeObjectURL(uploadObjectUrl); };
-  }, [uploadObjectUrl]);
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -189,6 +191,10 @@ function MelhoresMomentosPage() {
   const [moments, setMoments] = useState<ViralMoment[] | null>(null);
   const [videoTopic, setVideoTopic] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
+  const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
+  const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
+  const [clipPreviewError, setClipPreviewError] = useState<string | null>(null);
+  const [minScore, setMinScore] = useState(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
@@ -205,6 +211,10 @@ function MelhoresMomentosPage() {
 
   const getEffectiveStart = (m: ViralMoment) => (useHook[m.id] && m.hookStart !== undefined ? m.hookStart : m.start);
   const getEffectiveTitle = (m: ViralMoment) => m.titles[selectedTitle[m.id] ?? 0] ?? m.title;
+  const visibleMoments = useMemo(
+    () => (moments ? moments.filter((m) => m.score >= minScore) : []),
+    [moments, minScore]
+  );
 
   const [publishableAccounts, setPublishableAccounts] = useState<ConnectedAccount[] | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -252,6 +262,9 @@ function MelhoresMomentosPage() {
     setMoments(null);
     setVideoTopic(null);
     setActiveMoment(null);
+    setClipPreviewUrl(null);
+    setClipPreviewError(null);
+    setMinScore(0);
     setSelectedTitle({});
     setUseHook({});
     setLoading(true);
@@ -294,6 +307,9 @@ function MelhoresMomentosPage() {
     setMoments(null);
     setVideoTopic(null);
     setActiveMoment(null);
+    setClipPreviewUrl(null);
+    setClipPreviewError(null);
+    setMinScore(0);
     setSelectedTitle({});
     setUseHook({});
     setMomentThumbnails({});
@@ -463,9 +479,30 @@ function MelhoresMomentosPage() {
     }
   };
 
-  const embedSrc = activeMoment && videoId
-    ? `https://www.youtube.com/embed/${videoId}?start=${getEffectiveStart(activeMoment)}&end=${activeMoment.end}&autoplay=1`
-    : "";
+  // Cuts the real clip (via the same pipeline used for downloads/publishing)
+  // instead of embedding the full episode with start/end params — this is
+  // what actually makes "Assistir trecho" play only the cut, not the episode.
+  const handleOpenMoment = async (m: ViralMoment) => {
+    setActiveMoment(m);
+    setClipPreviewUrl(null);
+    setClipPreviewError(null);
+    if (!clipSource) return;
+    setClipPreviewLoading(true);
+    try {
+      const url = await ClipDownloadService.getClipDownloadUrl(clipSource, getEffectiveStart(m), m.end, false);
+      setClipPreviewUrl(url);
+    } catch (error: any) {
+      setClipPreviewError(error instanceof ClipDownloadError ? error.message : "Erro ao gerar o preview do corte.");
+    } finally {
+      setClipPreviewLoading(false);
+    }
+  };
+
+  const handleCloseMoment = () => {
+    setActiveMoment(null);
+    setClipPreviewUrl(null);
+    setClipPreviewError(null);
+  };
 
   return (
     <div className="hs-page">
@@ -652,7 +689,7 @@ function MelhoresMomentosPage() {
       )}
 
       {/* Inline player for the selected moment */}
-      {activeMoment && (videoId || (sourceMode === "upload" && uploadObjectUrl)) && (
+      {activeMoment && (
         <section className="tr-card tr-fade">
           <div className="tr-card-head">
             <Sparkles size={18} className="tr-icon-lime" />
@@ -660,31 +697,48 @@ function MelhoresMomentosPage() {
             <button
               className="hs-btn-ghost"
               style={{ marginLeft: "auto", flex: "none" }}
-              onClick={() => setActiveMoment(null)}
+              onClick={handleCloseMoment}
             >
               <X size={12} /> Fechar
             </button>
           </div>
-          <div className="tr-video-card">
-            <div className="tr-video-wrap">
-              {sourceMode === "upload" && uploadObjectUrl ? (
+          <div className="tr-video-card" style={{ display: "flex", flexWrap: "wrap", gap: 20, padding: "0 20px 20px" }}>
+            <div className="tr-video-wrap" style={{ flex: "1 1 320px", minWidth: 280 }}>
+              {clipPreviewLoading ? (
+                <div className="hs-loading" style={{ padding: "48px 0" }}>
+                  <div className="hs-loader-bar"><span /></div>
+                  <p>Cortando o trecho...</p>
+                </div>
+              ) : clipPreviewError ? (
+                <div className="tr-error">{clipPreviewError}</div>
+              ) : clipPreviewUrl ? (
                 <video
-                  key={`${activeMoment.id}-${getEffectiveStart(activeMoment)}`}
-                  src={uploadObjectUrl}
+                  key={clipPreviewUrl}
+                  src={clipPreviewUrl}
                   controls
                   autoPlay
-                  style={{ width: "100%", maxHeight: 480 }}
-                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = getEffectiveStart(activeMoment); }}
-                  onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= activeMoment.end) e.currentTarget.pause(); }}
+                  style={{ width: "100%", maxHeight: 480, borderRadius: 12, background: "#000" }}
                 />
-              ) : (
-                <iframe
-                  key={embedSrc}
-                  src={embedSrc}
-                  title={activeMoment.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+              ) : null}
+            </div>
+            <div style={{ flex: "1 1 260px", minWidth: 240, display: "flex", flexDirection: "column", gap: 10 }}>
+              <h3 style={{ margin: 0, fontSize: ".85rem", color: "var(--text-secondary)" }}>Detalhes do corte</h3>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span className="hs-thumb-speed" style={{ position: "static" }}>
+                  <Flame size={12} /> {activeMoment.score} Score
+                </span>
+                {activeMoment.profile && (
+                  <span className="hs-card-tag" style={{ marginLeft: 0 }}>{PROFILE_LABELS[activeMoment.profile]}</span>
+                )}
+                <span className="hs-card-views" style={{ margin: 0 }}>
+                  <Clock size={12} /> {formatTime(getEffectiveStart(activeMoment))} – {formatTime(activeMoment.end)} ({formatDuration(activeMoment.end - getEffectiveStart(activeMoment))})
+                </span>
+              </div>
+              <p style={{ margin: 0, lineHeight: 1.5, fontSize: ".85rem" }}>{activeMoment.reason}</p>
+              {useHook[activeMoment.id] && activeMoment.hookReason && (
+                <p style={{ margin: 0, lineHeight: 1.5, fontSize: ".85rem", color: "var(--primary-lime)", display: "flex", gap: 6, alignItems: "flex-start" }}>
+                  <Anchor size={12} style={{ flex: "none", marginTop: 3 }} /> {activeMoment.hookReason}
+                </p>
               )}
             </div>
           </div>
@@ -755,14 +809,35 @@ function MelhoresMomentosPage() {
       {/* Results */}
       {!loading && moments && (
         <>
-          <div className="hs-summary" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <div className="hs-summary" style={{ flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
             <span>
-              <strong>{moments.length}</strong> {moments.length === 1 ? "momento encontrado" : "momentos encontrados"} · ordenados por potencial viral
+              <strong>{visibleMoments.length}</strong> {visibleMoments.length === 1 ? "momento encontrado" : "momentos encontrados"}
+              {minScore > 0 && visibleMoments.length !== moments.length ? ` de ${moments.length} no total` : ""}
+              {" "}· ordenados por potencial viral
             </span>
             {videoTopic && (
               <span style={{ fontSize: ".78rem", color: "var(--text-secondary)" }}>
                 Sobre o vídeo: {videoTopic}
               </span>
+            )}
+            {moments.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {SCORE_FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className="hs-btn-ghost"
+                    style={{
+                      flex: "none",
+                      borderColor: minScore === f.value ? "var(--primary-lime)" : undefined,
+                      color: minScore === f.value ? "var(--primary-lime)" : undefined,
+                    }}
+                    onClick={() => setMinScore(f.value)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
           {downloadError && <div className="tr-error">{downloadError}</div>}
@@ -771,9 +846,13 @@ function MelhoresMomentosPage() {
             <div className="hs-empty">
               <p>Não encontramos momentos com potencial viral claro nesse vídeo.</p>
             </div>
+          ) : visibleMoments.length === 0 ? (
+            <div className="hs-empty">
+              <p>Nenhum corte atinge o score mínimo selecionado. Tente um filtro mais baixo.</p>
+            </div>
           ) : (
             <section className="hs-grid">
-              {moments.map((m) => {
+              {visibleMoments.map((m) => {
                 const effectiveStart = getEffectiveStart(m);
                 const titleIndex = selectedTitle[m.id] ?? 0;
                 const hookOn = useHook[m.id] === true;
@@ -782,7 +861,7 @@ function MelhoresMomentosPage() {
                   <div
                     className="hs-thumb"
                     style={{ position: "relative", overflow: "hidden", cursor: "pointer" }}
-                    onClick={() => setActiveMoment(m)}
+                    onClick={() => handleOpenMoment(m)}
                   >
                     {videoId && (
                       <img
@@ -862,7 +941,7 @@ function MelhoresMomentosPage() {
                       </div>
                     )}
                     <div className="hs-card-actions">
-                      <button className="hs-btn-ghost" onClick={() => setActiveMoment(m)}>
+                      <button className="hs-btn-ghost" onClick={() => handleOpenMoment(m)}>
                         <Play size={12} /> Assistir trecho
                       </button>
                       <button

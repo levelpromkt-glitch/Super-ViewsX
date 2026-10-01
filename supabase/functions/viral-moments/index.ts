@@ -69,7 +69,7 @@ const MOMENTS_TOOL = {
               type: "string",
               description: "O hook e o payoff do trecho em 1 frase (o que prende e o que resolve).",
             },
-            score: { type: "integer", description: "0 a 100, o quanto o trecho passou nos dois portões." },
+            score: { type: "integer", description: "0 a 100, intensidade viral real (ver seção Score no prompt) — não um indicador binário de aprovação. 90+ deve ser raro." },
             hookStart: {
               type: "integer",
               description: "Segundo exato de uma abertura mais agressiva dentro do mesmo trecho, só se existir uma genuinamente melhor que o início natural. Omita este campo se não houver.",
@@ -194,6 +194,17 @@ Se qualquer uma das três não existir explicitamente no texto, DESCARTE o trech
 - usa suspense genérico ("isso vai mudar tudo") em vez de uma promessa específica;
 - número forte aparece sem escala ou comparação que dê sentido a ele.
 
+## Score — meça intensidade viral, não só "passou no portão"
+
+Todo trecho na lista final já passou nos dois portões — isso é o mínimo pra existir, não o que diferencia o score. O criador quer saber QUAIS poucos trechos, dentre os aprovados, valem o esforço de postar primeiro. Se todo trecho aprovado ganha 70-90, o score não serve pra nada. Calibre pelas faixas abaixo, sendo rigoroso nas duas pontas:
+
+- **90-100 (raro, reserve para 1-2 trechos no vídeo inteiro)**: hook que funcionaria até fora do nicho do vídeo, payoff genuinamente surpreendente/alto-valor (não só "faz sentido"), zero fricção pra entender, nenhuma parte fraca no meio. É o tipo de corte que você postaria como primeira escolha sem pensar duas vezes.
+- **75-89**: hook específico e forte, payoff sólido e satisfatório, mas é forte principalmente pra quem já tem interesse no nicho — não necessariamente pra alguém de fora.
+- **60-74**: passa nos dois portões de forma correta, mas o hook é mais genérico ou o payoff é previsível/esperado — ninguém vai se arrepender de assistir, mas também não vai compartilhar com alguém.
+- **abaixo de 60**: só use se o trecho tecnicamente passou nos portões mas você está em dúvida real se ele deveria estar na lista — é o sinal pro criador de "talvez pule este".
+
+Não infle score pra justificar a existência do trecho na lista — é normal e esperado que a maioria dos trechos aprovados fique na faixa 60-89, com 90+ sendo exceção genuína. Avalie cada trecho contra os outros do MESMO vídeo, não numa escala abstrata.
+
 ## Perfis narrativos — classifique cada trecho aprovado em um
 
 - \`fast_answer\`: resposta/resultado → motivo → demonstração → limite
@@ -213,6 +224,7 @@ O criador escolhe qual usar como título do post; cada uma das 3 precisa ser for
 - As 3 variações usam ângulos DIFERENTES do mesmo trecho — não são sinônimos umas das outras. Exemplos de ângulos pra variar: a pergunta que o trecho responde vs. a afirmação polêmica vs. o número/resultado chocante vs. a virada de expectativa.
 - Nunca use reticências como muleta de suspense genérico ("Isso vai mudar tudo...") — se não dá pra ser específico, o trecho provavelmente não deveria ter sido aprovado.
 - Nunca use aspas dentro do texto da headline — parafraseie em vez de citar literalmente, para não quebrar nada na hora de estruturar a resposta.
+- **Fidelidade de contexto é inegociável**: antes de escrever as 3 headlines, releia literalmente só o texto entre "start" e "end" desse trecho — não o que vem antes, não o que vem depois, não um resumo de memória do vídeo inteiro. Cada headline só pode afirmar algo que está dito, com essas palavras ou o mesmo sentido, DENTRO desse intervalo exato. Se a frase que te fez pensar na headline está em outro [MM:SS] fora do intervalo, ou é só sua inferência do contexto geral do vídeo, ou ajuste "start"/"end" pra incluir essa frase, ou descarte essa headline — nunca descreva um trecho pelo assunto geral do vídeo quando o que é dito ali, especificamente, é outra coisa.
 
 ## Gancho viral — sempre calcule uma segunda opção de abertura mais agressiva
 
@@ -265,7 +277,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v11-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v12-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = await getCache(cacheSeed);
     if (cached) {
@@ -359,11 +371,32 @@ serve(async (req) => {
 
     const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
 
+    // The model only sees [MM:SS]-resolution timestamps, so its raw start/end
+    // can land a beat into the middle of a sentence — the actual audio a user
+    // hears then starts/ends on words that don't match the headline/reason
+    // written for that moment. Snapping each boundary to the real line it
+    // falls inside (using that line's exact, sub-second start/duration) fixes
+    // the clip to begin and end on an actual spoken-line boundary instead of
+    // the model's rounded guess.
+    const findLine = (t: number): TranscriptLine | undefined => {
+      let best: TranscriptLine | undefined;
+      for (const l of lines) {
+        const lineEnd = l.start + l.duration;
+        if (t >= l.start && t <= lineEnd) return l;
+        if (!best || Math.abs(l.start - t) < Math.abs(best.start - t)) best = l;
+      }
+      return best;
+    };
+
     const moments = momentsList
       .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
       .map((m, i) => {
-        const start = Math.max(0, Math.min(Math.floor(m.start), Math.floor(videoDurationSec)));
-        const end = Math.max(0, Math.min(Math.ceil(m.end), Math.ceil(videoDurationSec)));
+        const rawStart = Math.max(0, Math.min(m.start, videoDurationSec));
+        const rawEnd = Math.max(0, Math.min(m.end, videoDurationSec));
+        const startLine = findLine(rawStart);
+        const endLine = findLine(rawEnd);
+        const start = startLine ? Math.max(0, startLine.start) : Math.floor(rawStart);
+        const end = endLine ? Math.min(videoDurationSec, endLine.start + endLine.duration) : Math.ceil(rawEnd);
         const titles = [m.title1, m.title2, m.title3, m.title]
           .filter((t: unknown) => typeof t === 'string' && t.trim())
           .map((t: string) => t.slice(0, 80));
@@ -373,8 +406,10 @@ serve(async (req) => {
         // clip. Only keep it if it's a real, valid, meaningfully different cut.
         let hookStart: number | undefined;
         if (typeof m.hookStart === 'number') {
-          const clamped = Math.max(start, Math.min(Math.floor(m.hookStart), end));
-          if (clamped > start && end - clamped >= MIN_CLIP_SECONDS) hookStart = clamped;
+          const rawHook = Math.max(start, Math.min(m.hookStart, end));
+          const hookLine = findLine(rawHook);
+          const snappedHook = hookLine ? Math.max(start, hookLine.start) : Math.floor(rawHook);
+          if (snappedHook > start && end - snappedHook >= MIN_CLIP_SECONDS) hookStart = snappedHook;
         }
 
         return {
