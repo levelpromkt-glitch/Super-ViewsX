@@ -615,7 +615,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .tr-icon-lime { color: var(--primary-lime); }
 .tr-pill { margin-left: auto; font-size: .7rem; font-weight: 600; color: var(--primary-lime); background: rgba(158,255,46,.08); border: 1px solid rgba(158,255,46,.2); padding: 3px 10px; border-radius: 100px; }
 
-.tr-input-card { padding: 28px 32px; align-items: center; text-align: center; }
+.tr-input-card { padding: 28px 32px; align-items: center; text-align: center; position: relative; transition: border-color .15s ease, background .15s ease; }
+.tr-dropzone-active { border: 2px dashed var(--primary-lime) !important; background: rgba(158,255,46,.04); }
+.tr-dropzone-overlay { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(5,8,5,.82); border-radius: 14px; pointer-events: none; font-size: .95rem; font-weight: 700; color: var(--primary-lime); gap: 8px; }
 .tr-input-lead { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 4px; }
 .tr-input-badge { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 600; color: var(--primary-lime); background: rgba(158,255,46,.08); border: 1px solid rgba(158,255,46,.18); border-radius: 100px; padding: 5px 12px; }
 .tr-input-title { font-size: clamp(1.1rem, 2.2vw, 1.35rem); font-weight: 700; color: var(--text-main); letter-spacing: -.02em; margin: 0; }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   Anchor,
   ArrowRight,
@@ -174,6 +174,8 @@ function MelhoresMomentosPage() {
   const [url, setUrl] = useState("");
   const [videoId, setVideoId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = useRef(0);
   const [pastedTranscript, setPastedTranscript] = useState("");
   const [storagePath, setStoragePath] = useState<string | null>(null);
   const uploadObjectUrl = useMemo(() => (uploadFile ? URL.createObjectURL(uploadFile) : null), [uploadFile]);
@@ -347,6 +349,40 @@ function MelhoresMomentosPage() {
 
   const handleAnalyze = () => (sourceMode === "youtube" ? handleAnalyzeYoutube() : handleAnalyzeUpload());
 
+  // Dropping a video file anywhere on the input card switches straight to
+  // upload mode and attaches it — no need to click "Enviar vídeo" first.
+  // dragCounterRef tracks nested enter/leave pairs (every child element fires
+  // its own dragenter/dragleave) so the highlight doesn't flicker off while
+  // the pointer is still over a child.
+  const handleDragEnter = (e: DragEvent) => {
+    e.preventDefault();
+    if (!e.dataTransfer.types.includes("Files")) return;
+    dragCounterRef.current += 1;
+    setIsDraggingFile(true);
+  };
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+  };
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDraggingFile(false);
+  };
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+    const file = Array.from(e.dataTransfer.files || []).find((f) => f.type.startsWith("video/"));
+    if (!file) {
+      setUrlError("Solte um arquivo de vídeo (MP4, MOV, etc).");
+      return;
+    }
+    setSourceMode("upload");
+    setUrl("");
+    setUploadFile(file);
+    setUrlError(null);
+  };
+
   const clipSource: ClipSource | null = videoId ? { videoId } : storagePath ? { r2Key: storagePath } : null;
 
   const handleDownload = async (m: ViralMoment, vertical = false) => {
@@ -434,7 +470,18 @@ function MelhoresMomentosPage() {
   return (
     <div className="hs-page">
       {/* Input card */}
-      <section className="tr-card tr-input-card">
+      <section
+        className={`tr-card tr-input-card${isDraggingFile ? " tr-dropzone-active" : ""}`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDraggingFile && (
+          <div className="tr-dropzone-overlay">
+            <Upload size={18} /> Solte o vídeo aqui
+          </div>
+        )}
         <div className="tr-input-lead">
           <div className="tr-input-badge">
             <Link2 size={16} className="tr-icon-lime" />
@@ -501,7 +548,7 @@ function MelhoresMomentosPage() {
                 style={{ padding: 10 }}
               />
               <span style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>
-                Até {Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — dá pra subir um episódio inteiro.
+                Até {Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — ou arraste e solte o arquivo em qualquer lugar desta área.
               </span>
             </div>
           )}
