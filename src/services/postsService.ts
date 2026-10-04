@@ -24,7 +24,7 @@ export class PostsError extends Error {
   }
 }
 
-const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200MB — final clips meant for publishing.
+export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200MB — final clips meant for publishing.
 // Source videos analyzed for Melhores Momentos can be a full podcast/episode,
 // so they get a much higher ceiling (matches the post-videos bucket's own limit).
 export const MAX_SOURCE_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
@@ -80,6 +80,27 @@ export const PostsService = {
       scheduled_at: scheduledAt.toISOString(),
       status: "pending",
     });
+    if (error) throw new PostsError(error.message, "INSERT_FAILED");
+  },
+
+  async schedulePosts(
+    items: { platform: SocialPlatform; accountId: string; storagePath: string; caption: string; scheduledAt: Date }[]
+  ): Promise<void> {
+    if (items.length === 0) return;
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new PostsError("Sessão inválida.", "UNAUTHENTICATED");
+
+    const { error } = await supabase.from("scheduled_posts").insert(
+      items.map((item) => ({
+        user_id: user.id,
+        platform: item.platform,
+        account_id: item.accountId,
+        video_url: item.storagePath,
+        caption: item.caption,
+        scheduled_at: item.scheduledAt.toISOString(),
+        status: "pending",
+      }))
+    );
     if (error) throw new PostsError(error.message, "INSERT_FAILED");
   },
 

@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import {
   AlertCircle,
   Calendar,
   CheckCircle2,
   Clock,
-  Film,
+  CloudUpload,
   Loader2,
+  Plus,
   Send,
   Upload,
   X,
@@ -16,14 +17,15 @@ export const Route = createFileRoute("/dashboard/publicar")({
   component: PublicarPage,
 });
 
-import { PostsService, PostsError, ScheduledPost } from "@/services/postsService";
+import { PostsService, PostsError, ScheduledPost, MAX_UPLOAD_BYTES } from "@/services/postsService";
 import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccountsService";
-
-const PLATFORM_LABELS: Record<string, string> = {
-  tiktok: "TikTok",
-  youtube: "YouTube",
-  instagram: "Instagram",
-};
+import { PostCard, PLATFORM_SHORT, accountName } from "@/components/publish/PostCard";
+import {
+  distributeDates,
+  readVideoInfo,
+  toLocalInputValue,
+  type PostDraft,
+} from "@/components/publish/postDraft";
 
 const STATUS_LABELS: Record<ScheduledPost["status"], { label: string; color: string }> = {
   pending: { label: "Agendado", color: "var(--text-secondary)" },
@@ -33,27 +35,45 @@ const STATUS_LABELS: Record<ScheduledPost["status"], { label: string; color: str
   canceled: { label: "Cancelado", color: "var(--text-muted)" },
 };
 
+const DEFAULT_TIMES = ["10:00", "14:00", "19:00"];
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function tomorrowDateValue() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return toLocalInputValue(d).slice(0, 10);
+}
+
 function PublicarPage() {
+  const [tab, setTab] = useState<"create" | "history">("create");
   const [accounts, setAccounts] = useState<ConnectedAccount[] | null>(null);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) || null;
-  const [file, setFile] = useState<File | null>(null);
-  const [caption, setCaption] = useState("");
-  const [mode, setMode] = useState<"now" | "schedule">("now");
-  const [scheduledAt, setScheduledAt] = useState("");
+  const [defaultAccountIds, setDefaultAccountIds] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<PostDraft[]>([]);
+  const [mode, setMode] = useState<"schedule" | "now">("schedule");
+  const [startDate, setStartDate] = useState(tomorrowDateValue);
+  const [times, setTimes] = useState<string[]>(DEFAULT_TIMES);
+  const [newTime, setNewTime] = useState("");
+
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const draftsRef = useRef<PostDraft[]>([]);
+  draftsRef.current = drafts;
+
   const [submitting, setSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [posts, setPosts] = useState<ScheduledPost[] | null>(null);
   const [postsError, setPostsError] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+
+  const requireDate = mode === "schedule";
 
   const loadPosts = () => {
     PostsService.listPosts()
@@ -66,65 +86,182 @@ function PublicarPage() {
       .then((all) => {
         const publishable = all.filter((a) => a.platform === "tiktok" || a.platform === "youtube" || a.platform === "instagram");
         setAccounts(publishable);
-        if (publishable.length > 0) setSelectedAccountId(publishable[0].id);
+        if (publishable.length === 1) setDefaultAccountIds([publishable[0].id]);
       })
       .catch(() => setAccounts([]));
     loadPosts();
+    return () => draftsRef.current.forEach((d) => URL.revokeObjectURL(d.previewUrl));
   }, []);
 
-  const resetForm = () => {
-    setFile(null);
-    setCaption("");
-    setScheduledAt("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const addFiles = (files: File[]) => {
+    setFormError(null);
+    setFormSuccess(null);
+    const videos = files.filter((f) => f.type.startsWith("video/"));
+    if (videos.length === 0) {
+      setFormError("Solte arquivos de vídeo (MP4, MOV, etc).");
+      return;
+    }
+    const tooBig = videos.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    const ok = videos.filter((f) => f.size <= MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      setFormError(
+        `${tooBig.length === 1 ? `"${tooBig[0].name}" excede` : `${tooBig.length} vídeos excedem`} o limite de ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB.`
+      );
+    }
+
+    const created: PostDraft[] = ok.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+      thumbnail: null,
+      duration: null,
+      caption: "",
+      accountIds: [...defaultAccountIds],
+      scheduledAt: "",
+    }));
+    setDrafts((prev) => [...prev, ...created]);
+
+    created.forEach((d) => {
+      readVideoInfo(d.previewUrl).then((info) => patchDraft(d.id, info));
+    });
   };
+
+  const patchDraft = (id: string, patch: Partial<PostDraft>) =>
+    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+
+  const removeDraft = (id: string) => {
+    setDrafts((prev) => {
+      const target = prev.find((d) => d.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((d) => d.id !== id);
+    });
+  };
+
+  const handleDragEnter = (e: DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDragging(true);
+  };
+  const handleDragOver = (e: DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+  };
+  const handleDragLeave = (e: DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragging(false);
+  };
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    addFiles(Array.from(e.dataTransfer.files || []));
+  };
+
+  const toggleDefaultAccount = (id: string) =>
+    setDefaultAccountIds((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
+
+  const applyAccountsToAll = () => setDrafts((prev) => prev.map((d) => ({ ...d, accountIds: [...defaultAccountIds] })));
+
+  const addTime = () => {
+    if (!newTime || times.includes(newTime)) return;
+    setTimes((prev) => [...prev, newTime].sort());
+    setNewTime("");
+  };
+
+  const handleDistribute = () => {
+    if (drafts.length === 0) return;
+    const dates = distributeDates(drafts.length, startDate, times);
+    if (dates.length === 0) {
+      setFormError("Escolha a data de início e ao menos um horário.");
+      return;
+    }
+    setFormError(null);
+    setDrafts((prev) => prev.map((d, i) => ({ ...d, scheduledAt: dates[i] ?? d.scheduledAt })));
+  };
+
+  const isIncomplete = (d: PostDraft) =>
+    d.accountIds.length === 0 ||
+    (requireDate && (d.scheduledAt === "" || new Date(d.scheduledAt).getTime() <= Date.now()));
+
+  const incompleteCount = drafts.filter(isIncomplete).length;
+  const totalPosts = drafts.reduce((sum, d) => sum + d.accountIds.length, 0);
 
   const handleSubmit = async () => {
     setFormError(null);
     setFormSuccess(null);
-
-    if (!file) {
-      setFormError("Escolha um vídeo do seu computador.");
+    if (drafts.length === 0) {
+      setFormError("Adicione ao menos um vídeo.");
       return;
     }
-    if (!selectedAccountId || !selectedAccount) {
-      setFormError("Escolha em qual conta publicar.");
-      return;
-    }
-    if (mode === "schedule" && !scheduledAt) {
-      setFormError("Escolha a data e hora do agendamento.");
-      return;
-    }
-    const scheduledDate = mode === "schedule" ? new Date(scheduledAt) : null;
-    if (scheduledDate && scheduledDate.getTime() <= Date.now()) {
-      setFormError("A data de agendamento precisa ser no futuro.");
+    if (incompleteCount > 0) {
+      setShowErrors(true);
+      setFormError(`${incompleteCount} ${incompleteCount === 1 ? "post está incompleto" : "posts estão incompletos"}. Veja os cards em vermelho.`);
       return;
     }
 
     setSubmitting(true);
-    try {
-      setSubmitStatus("Enviando vídeo...");
-      const storagePath = await PostsService.uploadVideo(file);
+    const failures: string[] = [];
+    let okPosts = 0;
+    const snapshot = [...drafts];
 
-      const platform = selectedAccount!.platform;
-      const platformLabel = PLATFORM_LABELS[platform] ?? platform;
-      if (mode === "now") {
-        setSubmitStatus(`Publicando no ${platformLabel}...`);
-        await PostsService.publishNow(platform, selectedAccountId, storagePath, caption);
-        setFormSuccess(`Vídeo publicado no ${platformLabel}!`);
-      } else {
-        await PostsService.schedulePost(platform, selectedAccountId, storagePath, caption, scheduledDate!);
-        setFormSuccess("Post agendado com sucesso!");
+    for (let i = 0; i < snapshot.length; i++) {
+      const d = snapshot[i];
+      setSubmitStatus(`Enviando vídeo ${i + 1} de ${snapshot.length}...`);
+      let storagePath: string;
+      try {
+        storagePath = await PostsService.uploadVideo(d.file);
+      } catch (err: any) {
+        failures.push(`${d.file.name}: ${err instanceof PostsError ? err.message : "falha no envio."}`);
+        continue;
       }
 
-      resetForm();
-      loadPosts();
-    } catch (err: any) {
-      setFormError(err instanceof PostsError ? err.message : "Erro inesperado ao publicar.");
-    } finally {
-      setSubmitting(false);
-      setSubmitStatus("");
+      const selected = d.accountIds
+        .map((id) => accounts?.find((a) => a.id === id))
+        .filter((a): a is ConnectedAccount => !!a);
+
+      if (mode === "schedule") {
+        try {
+          await PostsService.schedulePosts(
+            selected.map((a) => ({
+              platform: a.platform,
+              accountId: a.id,
+              storagePath,
+              caption: d.caption,
+              scheduledAt: new Date(d.scheduledAt),
+            }))
+          );
+          okPosts += selected.length;
+          removeDraft(d.id);
+        } catch (err: any) {
+          failures.push(`${d.file.name}: ${err instanceof PostsError ? err.message : "falha ao agendar."}`);
+        }
+      } else {
+        const failedIds: string[] = [];
+        for (const a of selected) {
+          setSubmitStatus(`Publicando ${i + 1} de ${snapshot.length} no ${PLATFORM_SHORT[a.platform] ?? a.platform}...`);
+          try {
+            await PostsService.publishNow(a.platform, a.id, storagePath, d.caption);
+            okPosts += 1;
+          } catch (err: any) {
+            failedIds.push(a.id);
+            failures.push(`${d.file.name} → ${accountName(a)}: ${err instanceof PostsError ? err.message : "falha ao publicar."}`);
+          }
+        }
+        if (failedIds.length === 0) removeDraft(d.id);
+        else patchDraft(d.id, { accountIds: failedIds });
+      }
     }
+
+    setSubmitting(false);
+    setSubmitStatus("");
+    setShowErrors(false);
+    loadPosts();
+    if (okPosts > 0) {
+      const verb = mode === "schedule" ? (okPosts === 1 ? "post agendado" : "posts agendados") : okPosts === 1 ? "post publicado" : "posts publicados";
+      setFormSuccess(`${okPosts} ${verb}.`);
+    }
+    if (failures.length > 0) setFormError(failures.join(" · "));
   };
 
   const handleCancel = async (id: string) => {
@@ -139,199 +276,277 @@ function PublicarPage() {
     }
   };
 
+  const noAccounts = accounts !== null && accounts.length === 0;
+
   return (
     <div className="hs-page">
-      <section className="tr-card tr-input-card">
-        <div className="tr-input-lead">
-          <div className="tr-input-badge">
-            <Send size={16} className="tr-icon-lime" />
-            <span>Publicar</span>
-          </div>
-          <h2 className="tr-input-title">Publique um vídeo do seu computador</h2>
-          <p className="tr-input-hint">
-            Envie um arquivo de vídeo e publique agora ou agende para mais tarde.
-          </p>
-        </div>
-
-        {accounts !== null && accounts.length === 0 && (
-          <div className="tr-error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertCircle size={14} />
-            Conecte uma conta do TikTok, YouTube ou Instagram antes de publicar.{" "}
-            <Link to="/dashboard/configuracoes" style={{ color: "var(--primary-lime)", marginLeft: 4 }}>
-              Conectar agora
-            </Link>
-          </div>
-        )}
-
-        {accounts !== null && accounts.length > 1 && (
-          <div className="tr-field">
-            <label className="hs-label">Publicar como</label>
-            <select
-              className="tr-input"
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label || a.platform_username} ({PLATFORM_LABELS[a.platform] ?? a.platform})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="tr-field">
-          <label className="hs-label">Vídeo</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="tr-input"
-            style={{ padding: 10 }}
-          />
-          {file && (
-            <span style={{ fontSize: ".78rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-              <Film size={14} /> {file.name} ({(file.size / (1024 * 1024)).toFixed(1)} MB)
-            </span>
-          )}
-        </div>
-
-        <div className="tr-field">
-          <label className="hs-label">Legenda</label>
-          <textarea
-            className="tr-input"
-            style={{ width: "100%", minHeight: 70, resize: "vertical", fontFamily: "inherit" }}
-            value={caption}
-            maxLength={150}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Escreva a legenda do post..."
-          />
-        </div>
-
-        <div className="tr-field">
-          <label className="hs-label">Quando publicar</label>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <button
-              type="button"
-              className="hs-btn-ghost"
-              style={{
-                flex: "none",
-                borderColor: mode === "now" ? "var(--primary-lime)" : undefined,
-                color: mode === "now" ? "var(--primary-lime)" : undefined,
-              }}
-              onClick={() => setMode("now")}
-            >
-              <Send size={12} /> Agora
-            </button>
-            <button
-              type="button"
-              className="hs-btn-ghost"
-              style={{
-                flex: "none",
-                borderColor: mode === "schedule" ? "var(--primary-lime)" : undefined,
-                color: mode === "schedule" ? "var(--primary-lime)" : undefined,
-              }}
-              onClick={() => setMode("schedule")}
-            >
-              <Calendar size={12} /> Agendar
-            </button>
-          </div>
-          {mode === "schedule" && (
-            <input
-              type="datetime-local"
-              className="tr-input"
-              style={{ marginTop: 10, width: "fit-content" }}
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-            />
-          )}
-        </div>
-
-        {formError && <div className="tr-error">{formError}</div>}
-        {formSuccess && (
-          <div className="tr-success">
-            <CheckCircle2 size={18} />
-            <span>{formSuccess}</span>
-          </div>
-        )}
-
-        <button className="btn-primary tr-btn-main" onClick={handleSubmit} disabled={submitting || !selectedAccountId}>
-          {submitting ? (
-            <>
-              <Loader2 size={16} className="tr-spin" /> {submitStatus || "Processando..."}
-            </>
-          ) : mode === "now" ? (
-            <>
-              <Send size={16} /> Publicar agora
-            </>
-          ) : (
-            <>
-              <Calendar size={16} /> Agendar post
-            </>
-          )}
+      <div className="pb-tabs">
+        <button type="button" className={`pb-tab${tab === "create" ? " active" : ""}`} onClick={() => setTab("create")}>
+          <Send size={13} /> Criar posts
         </button>
-      </section>
+        <button type="button" className={`pb-tab${tab === "history" ? " active" : ""}`} onClick={() => setTab("history")}>
+          <Clock size={13} /> Histórico{posts && posts.length > 0 ? ` (${posts.length})` : ""}
+        </button>
+      </div>
 
-      <section className="tr-card tr-fade">
-        <div className="tr-card-head">
-          <Upload size={18} className="tr-icon-lime" />
-          <h2>Histórico de posts</h2>
-        </div>
-        <div style={{ padding: "0 20px 20px" }}>
-          {postsError && <div className="tr-error">{postsError}</div>}
-          {!posts ? (
-            <p className="tr-muted">Carregando...</p>
-          ) : posts.length === 0 ? (
-            <div className="hs-empty">
-              <p>Nenhum post ainda. Publique ou agende um vídeo acima.</p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {posts.map((p) => {
-                const statusInfo = STATUS_LABELS[p.status];
-                return (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 14px",
-                      borderRadius: "var(--radius)",
-                      border: "1px solid var(--border-soft)",
-                      background: "var(--bg-card)",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: ".85rem", fontWeight: 600, color: "var(--text-main)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {p.caption || "(sem legenda)"}
-                      </div>
-                      <div style={{ fontSize: ".72rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                        <Clock size={11} /> {formatDateTime(p.scheduled_at)}
-                        {p.error_message && <span style={{ color: "#ff6b6b" }}> · {p.error_message}</span>}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: ".72rem", fontWeight: 700, color: statusInfo.color, flexShrink: 0 }}>
-                      {statusInfo.label}
-                    </span>
-                    {p.status === "pending" && (
-                      <button
-                        className="hs-btn-ghost"
-                        style={{ flex: "none" }}
-                        onClick={() => handleCancel(p.id)}
-                        disabled={cancelingId === p.id}
-                      >
-                        {cancelingId === p.id ? <Loader2 size={12} className="tr-spin" /> : <X size={12} />}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+      {tab === "create" && (
+        <>
+          {noAccounts && (
+            <div className="tr-error" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <AlertCircle size={14} />
+              Conecte uma conta do TikTok, YouTube ou Instagram antes de publicar.{" "}
+              <Link to="/dashboard/configuracoes" style={{ color: "var(--primary-lime)", marginLeft: 4 }}>
+                Conectar agora
+              </Link>
             </div>
           )}
-        </div>
-      </section>
+
+          <div className="pb-layout">
+            <div className="pb-main">
+              <div
+                className={`pb-dropzone${isDragging ? " active" : ""}${drafts.length > 0 ? " compact" : ""}`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+                }}
+              >
+                <CloudUpload size={drafts.length > 0 ? 18 : 28} className="tr-icon-lime" />
+                <div>
+                  <strong>{isDragging ? "Solte os vídeos aqui" : "Arraste vários vídeos aqui"}</strong>
+                  <span className="pb-muted"> ou clique para escolher</span>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    addFiles(Array.from(e.target.files || []));
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+
+              {drafts.length > 0 && (
+                <div className="pb-grid">
+                  {drafts.map((d) => (
+                    <PostCard
+                      key={d.id}
+                      draft={d}
+                      accounts={accounts || []}
+                      requireDate={requireDate}
+                      showErrors={showErrors}
+                      disabled={submitting}
+                      onChange={(patch) => patchDraft(d.id, patch)}
+                      onRemove={() => removeDraft(d.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <aside className="pb-side">
+              <div className="pb-panel">
+                <p className="pb-panel-title">Quando publicar</p>
+                <div className="pb-seg">
+                  <button type="button" className={mode === "schedule" ? "active" : ""} onClick={() => setMode("schedule")}>
+                    <Calendar size={12} /> Agendar
+                  </button>
+                  <button type="button" className={mode === "now" ? "active" : ""} onClick={() => setMode("now")}>
+                    <Send size={12} /> Agora
+                  </button>
+                </div>
+              </div>
+
+              <div className="pb-panel">
+                <p className="pb-panel-title">Contas</p>
+                {accounts === null ? (
+                  <p className="pb-muted">Carregando...</p>
+                ) : (
+                  (["tiktok", "youtube", "instagram"] as const).map((platform) => {
+                    const group = accounts.filter((a) => a.platform === platform);
+                    if (group.length === 0) return null;
+                    return (
+                      <div key={platform} className="pb-acc-group">
+                        <span className="pb-acc-platform">{PLATFORM_SHORT[platform]}</span>
+                        {group.map((a) => (
+                          <label key={a.id} className="pb-acc-row">
+                            <input
+                              type="checkbox"
+                              checked={defaultAccountIds.includes(a.id)}
+                              onChange={() => toggleDefaultAccount(a.id)}
+                            />
+                            {accountName(a)}
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  })
+                )}
+                <button
+                  type="button"
+                  className="hs-btn-ghost pb-full"
+                  onClick={applyAccountsToAll}
+                  disabled={drafts.length === 0 || defaultAccountIds.length === 0}
+                >
+                  Aplicar a todos os cards
+                </button>
+                <span className="pb-hint">Novos vídeos já entram com estas contas.</span>
+              </div>
+
+              {mode === "schedule" && (
+                <div className="pb-panel">
+                  <p className="pb-panel-title">Distribuir automaticamente</p>
+                  <label className="pb-field-row">
+                    Início
+                    <input
+                      type="date"
+                      className="tr-input pb-input-sm"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </label>
+                  <div className="pb-field-row" style={{ alignItems: "flex-start" }}>
+                    Horários
+                    <div className="pb-chips">
+                      {times.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className="pb-chip pb-chip-on"
+                          onClick={() => setTimes((prev) => prev.filter((x) => x !== t))}
+                          title="Remover horário"
+                        >
+                          {t} <X size={10} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pb-field-row">
+                    <input
+                      type="time"
+                      className="tr-input pb-input-sm"
+                      value={newTime}
+                      onChange={(e) => setNewTime(e.target.value)}
+                    />
+                    <button type="button" className="hs-btn-ghost" style={{ flex: "none" }} onClick={addTime} disabled={!newTime}>
+                      <Plus size={12} /> Horário
+                    </button>
+                  </div>
+                  <span className="pb-hint">
+                    {times.length} {times.length === 1 ? "post" : "posts"} por dia, na ordem dos cards.
+                  </span>
+                  <button
+                    type="button"
+                    className="hs-btn-ghost pb-full"
+                    onClick={handleDistribute}
+                    disabled={drafts.length === 0 || times.length === 0}
+                  >
+                    Distribuir datas
+                  </button>
+                </div>
+              )}
+            </aside>
+          </div>
+
+          {formError && <div className="tr-error">{formError}</div>}
+          {formSuccess && (
+            <div className="tr-success">
+              <CheckCircle2 size={18} />
+              <span>{formSuccess}</span>
+            </div>
+          )}
+
+          <div className="pb-footer">
+            <span className="pb-muted">
+              {drafts.length === 0
+                ? "Nenhum vídeo adicionado"
+                : `${drafts.length} ${drafts.length === 1 ? "vídeo" : "vídeos"} · ${totalPosts} ${totalPosts === 1 ? "post" : "posts"}${incompleteCount > 0 ? ` · ${incompleteCount} incompleto${incompleteCount === 1 ? "" : "s"}` : ""}`}
+            </span>
+            <button
+              className="btn-primary tr-btn-main"
+              style={{ width: "auto", padding: "0 22px" }}
+              onClick={handleSubmit}
+              disabled={submitting || drafts.length === 0}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={16} className="tr-spin" /> {submitStatus || "Processando..."}
+                </>
+              ) : mode === "schedule" ? (
+                <>
+                  <Calendar size={16} /> Agendar {totalPosts > 0 ? `${totalPosts} ${totalPosts === 1 ? "post" : "posts"}` : ""}
+                </>
+              ) : (
+                <>
+                  <Send size={16} /> Publicar {totalPosts > 0 ? `${totalPosts} ${totalPosts === 1 ? "post" : "posts"}` : ""} agora
+                </>
+              )}
+            </button>
+          </div>
+        </>
+      )}
+
+      {tab === "history" && (
+        <section className="tr-card tr-fade">
+          <div className="tr-card-head">
+            <Upload size={18} className="tr-icon-lime" />
+            <h2>Histórico de posts</h2>
+          </div>
+          <div style={{ padding: "0 20px 20px" }}>
+            {postsError && <div className="tr-error">{postsError}</div>}
+            {!posts ? (
+              <p className="tr-muted">Carregando...</p>
+            ) : posts.length === 0 ? (
+              <div className="hs-empty">
+                <p>Nenhum post ainda. Crie ou agende vídeos na aba Criar posts.</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {posts.map((p) => {
+                  const statusInfo = STATUS_LABELS[p.status];
+                  const acc = accounts?.find((a) => a.id === p.account_id);
+                  return (
+                    <div key={p.id} className="pb-history-row">
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="pb-history-caption">{p.caption || "(sem legenda)"}</div>
+                        <div className="pb-history-meta">
+                          <Clock size={11} /> {formatDateTime(p.scheduled_at)}
+                          <span>·</span>
+                          {PLATFORM_SHORT[p.platform] ?? p.platform}
+                          {acc && <span>· {accountName(acc)}</span>}
+                          {p.error_message && <span style={{ color: "#ff6b6b" }}>· {p.error_message}</span>}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: ".72rem", fontWeight: 700, color: statusInfo.color, flexShrink: 0 }}>
+                        {statusInfo.label}
+                      </span>
+                      {p.status === "pending" && (
+                        <button
+                          className="hs-btn-ghost"
+                          style={{ flex: "none" }}
+                          onClick={() => handleCancel(p.id)}
+                          disabled={cancelingId === p.id}
+                          aria-label="Cancelar agendamento"
+                        >
+                          {cancelingId === p.id ? <Loader2 size={12} className="tr-spin" /> : <X size={12} />}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
