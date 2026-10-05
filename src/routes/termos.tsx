@@ -15,7 +15,7 @@ function TermosPage() {
       </Link>
       <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: "16px 0 8px" }}>Termos de Serviço</h1>
       <p style={{ color: "var(--text-muted)", fontSize: ".85rem", marginBottom: 32 }}>
-        Última atualização: {new Date().toLocaleDateString("pt-BR")}
+        Última atualização: 5 de outubro de 2026
       </p>
 
       <p>
@@ -37,6 +37,20 @@ function TermosPage() {
         agendar e gerenciar conteúdo em seu nome, dentro do escopo de permissões concedido durante a autorização.
         Você pode revogar esse acesso a qualquer momento, tanto pela Plataforma quanto diretamente nas configurações
         da rede social conectada. Você é o único responsável pelo conteúdo publicado através da sua conta.
+      </p>
+      <p>
+        Ao conectar contas do YouTube, você também concorda com os{" "}
+        <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary-lime)" }}>
+          Termos de Serviço do YouTube
+        </a>
+        . Ao conectar contas do TikTok e do Instagram, você continua sujeito aos termos e às diretrizes de cada uma
+        dessas plataformas, incluindo as regras de conteúdo, de conteúdo comercial e de limites de publicação. Só
+        conecte contas que sejam suas ou que você esteja autorizado a administrar.
+      </p>
+      <p>
+        As configurações de cada publicação (visibilidade, comentários, marcações, entre outras) são escolhidas por
+        você, e algumas plataformas podem limitar ou restringir a visibilidade de conteúdo publicado via API
+        conforme o estágio de aprovação do aplicativo junto a elas.
       </p>
 
       <h2 style={{ marginTop: 32, fontSize: "1.25rem", fontWeight: 700 }}>3. Responsabilidade sobre o conteúdo</h2>
