@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import type { TikTokCreatorInfo } from "@/lib/platformRules";
 
 export type SocialPlatform = "tiktok" | "youtube" | "instagram";
 
@@ -60,6 +61,18 @@ export const SocialAccountsService = {
       throw new SocialAccountsError(data?.message || "Erro ao concluir a conexão com o TikTok.", data?.code || "UNKNOWN_ERROR");
     }
     return data.platformUsername as string;
+  },
+
+  async getTikTokCreatorInfo(accountId: string): Promise<TikTokCreatorInfo> {
+    const { data, error } = await supabase.functions.invoke("tiktok-creator-info", { body: { accountId } });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao consultar as opções da conta do TikTok.");
+      throw new SocialAccountsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new SocialAccountsError(data?.message || "Erro ao consultar as opções da conta do TikTok.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.info as TikTokCreatorInfo;
   },
 
   async publishToTikTok(accountId: string, videoId: string, start: number, end: number, caption: string): Promise<string> {

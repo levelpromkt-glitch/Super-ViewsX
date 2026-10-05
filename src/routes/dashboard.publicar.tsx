@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   AlertCircle,
   Calendar,
@@ -23,6 +23,17 @@ import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccoun
 import { PlatformLogo } from "@/components/social/PlatformLogo";
 import { PLATFORM_SHORT, accountName } from "@/components/publish/publishUtils";
 import { DateField, TimeField, defaultScheduleSlot } from "@/components/publish/DateTimeFields";
+import { ContentSection } from "@/components/publish/ContentSection";
+import {
+  buildPlan,
+  defaultSettings,
+  summaryText,
+  type PlatformSettings,
+  type PublishPlatform,
+  type TikTokCreatorInfo,
+} from "@/lib/platformRules";
+
+type TikTokInfoEntry = { info: TikTokCreatorInfo | null; error: string | null; loading: boolean };
 
 const STATUS_LABELS: Record<ScheduledPost["status"], { label: string; color: string }> = {
   pending: { label: "Agendado", color: "var(--text-secondary)" },
@@ -42,7 +53,10 @@ function PublicarPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [caption, setCaption] = useState("");
+  const [base, setBase] = useState("");
+  const [settings, setSettings] = useState<PlatformSettings>(defaultSettings);
+  const [tiktokInfos, setTiktokInfos] = useState<Record<string, TikTokInfoEntry>>({});
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [accountIds, setAccountIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"now" | "schedule">("now");
   const [schedDate, setSchedDate] = useState("");
@@ -88,6 +102,7 @@ function PublicarPage() {
     previewUrlRef.current = null;
     setFile(null);
     setPreviewUrl(null);
+    setVideoDuration(null);
   };
 
   const pickFile = (files: File[]) => {
@@ -107,6 +122,7 @@ function PublicarPage() {
     previewUrlRef.current = url;
     setFile(video);
     setPreviewUrl(url);
+    setVideoDuration(null);
   };
 
   const dropProps = {
@@ -148,6 +164,63 @@ function PublicarPage() {
   const scheduleInPast = scheduledAt !== null && scheduledAt.getTime() <= Date.now();
   const noAccount = accountIds.length === 0;
 
+  const selectedAccounts = accountIds
+    .map((id) => accounts?.find((a) => a.id === id))
+    .filter((a): a is ConnectedAccount => !!a);
+  const selectedPlatforms = (["youtube", "tiktok", "instagram"] as PublishPlatform[]).filter((p) =>
+    selectedAccounts.some((a) => a.platform === p)
+  );
+  const selectedTiktokIds = selectedAccounts.filter((a) => a.platform === "tiktok").map((a) => a.id);
+
+  useEffect(() => {
+    selectedTiktokIds.forEach((id) => {
+      if (tiktokInfos[id]) return;
+      setTiktokInfos((prev) => ({ ...prev, [id]: { info: null, error: null, loading: true } }));
+      SocialAccountsService.getTikTokCreatorInfo(id)
+        .then((info) => setTiktokInfos((prev) => ({ ...prev, [id]: { info, error: null, loading: false } })))
+        .catch((err: any) =>
+          setTiktokInfos((prev) => ({
+            ...prev,
+            [id]: { info: null, error: err?.message || "Não foi possível consultar as opções do TikTok.", loading: false },
+          }))
+        );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTiktokIds.join(",")]);
+
+  // Several TikTok accounts selected: only offer what every one of them allows.
+  const tiktokUi = useMemo(() => {
+    const entries = selectedTiktokIds.map((id) => tiktokInfos[id]).filter(Boolean) as TikTokInfoEntry[];
+    const loaded = entries.filter((e) => e.info).map((e) => e.info as TikTokCreatorInfo);
+    const privacyOptions =
+      loaded.length === 0
+        ? []
+        : loaded.map((i) => i.privacyOptions).reduce((acc, opts) => acc.filter((o) => opts.includes(o)));
+    const durations = loaded.map((i) => i.maxVideoDurationSec).filter((d): d is number => !!d);
+    const info: TikTokCreatorInfo | null =
+      loaded.length === 0
+        ? null
+        : {
+            privacyOptions,
+            commentDisabled: loaded.some((i) => i.commentDisabled),
+            duetDisabled: loaded.some((i) => i.duetDisabled),
+            stitchDisabled: loaded.some((i) => i.stitchDisabled),
+            maxVideoDurationSec: durations.length > 0 ? Math.min(...durations) : null,
+          };
+    return {
+      privacyOptions,
+      info,
+      loading: entries.some((e) => e.loading),
+      error: entries.find((e) => e.error)?.error ?? null,
+    };
+  }, [tiktokInfos, selectedTiktokIds.join(",")]);
+
+  const plan = useMemo(
+    () => buildPlan(selectedPlatforms, base, settings, { privacyOptions: tiktokUi.privacyOptions, info: tiktokUi.info }, videoDuration),
+    [selectedPlatforms.join(","), base, settings, tiktokUi, videoDuration]
+  );
+  const planErrors = selectedPlatforms.flatMap((p) => (plan.errors[p] || []).map((e) => `${p === "youtube" ? "YouTube" : p === "tiktok" ? "TikTok" : "Instagram"}: ${e}`));
+
   const handleSubmit = async () => {
     setFormError(null);
     setFormSuccess(null);
@@ -162,6 +235,14 @@ function PublicarPage() {
     }
     if (mode === "schedule" && (!scheduledAt || scheduleInPast)) {
       setFormError("Escolha uma data e hora no futuro.");
+      return;
+    }
+    if (tiktokUi.loading) {
+      setFormError("Aguarde: ainda carregando as opções da conta do TikTok.");
+      return;
+    }
+    if (planErrors.length > 0) {
+      setFormError(`Corrija antes de publicar — ${planErrors.join(" · ")}`);
       return;
     }
 
@@ -179,13 +260,15 @@ function PublicarPage() {
             platform: a.platform,
             accountId: a.id,
             storagePath,
-            caption,
+            caption: summaryText(a.platform, plan.options[a.platform]!),
+            options: plan.options[a.platform],
             scheduledAt: scheduledAt!,
           }))
         );
         setFormSuccess(selected.length === 1 ? "Post agendado." : `${selected.length} posts agendados.`);
         clearVideo();
-        setCaption("");
+        setBase("");
+        setSettings(defaultSettings());
         setShowErrors(false);
       } else {
         const failedIds: string[] = [];
@@ -193,7 +276,7 @@ function PublicarPage() {
         for (const a of selected) {
           setSubmitStatus(`Publicando no ${PLATFORM_SHORT[a.platform] ?? a.platform}...`);
           try {
-            await PostsService.publishNow(a.platform, a.id, storagePath, caption);
+            await PostsService.publishNow(a.platform, a.id, storagePath, summaryText(a.platform, plan.options[a.platform]!), plan.options[a.platform]);
           } catch (err: any) {
             failedIds.push(a.id);
             failures.push(`${accountName(a)}: ${err instanceof PostsError ? err.message : "falha ao publicar."}`);
@@ -203,7 +286,8 @@ function PublicarPage() {
         if (okCount > 0) setFormSuccess(okCount === 1 ? "Post publicado." : `${okCount} posts publicados.`);
         if (failedIds.length === 0) {
           clearVideo();
-          setCaption("");
+          setBase("");
+        setSettings(defaultSettings());
           setShowErrors(false);
         } else {
           setAccountIds(failedIds);
@@ -324,16 +408,17 @@ function PublicarPage() {
                 </div>
 
                 <div className="pb-section">
-                  <span className="pb-label">2. Legenda</span>
-                  <textarea
-                    className="pb-caption"
-                    value={caption}
-                    maxLength={150}
+                  <span className="pb-label">2. Conteúdo</span>
+                  <ContentSection
+                    platforms={selectedPlatforms}
+                    base={base}
+                    onBase={setBase}
+                    settings={settings}
+                    onSettings={setSettings}
+                    plan={plan}
+                    tiktok={tiktokUi}
                     disabled={submitting}
-                    placeholder="Escreva a legenda do post..."
-                    onChange={(e) => setCaption(e.target.value)}
                   />
-                  <span className="pb-hint pb-count">{caption.length}/150</span>
                 </div>
 
                 <div className="pb-section">
@@ -386,7 +471,12 @@ function PublicarPage() {
 
               <aside className={`pb-preview${isDragging ? " active" : ""}`} {...dropProps}>
                 <div className="pb-preview-frame">
-                  <video src={previewUrl || undefined} controls className="pb-preview-video" />
+                  <video
+                    src={previewUrl || undefined}
+                    controls
+                    className="pb-preview-video"
+                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  />
                 </div>
                 <div className="pb-preview-file" title={file.name}>
                   <Film size={14} />

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import type { SocialPlatform } from "./socialAccountsService";
+import type { PostOptions } from "@/lib/platformRules";
 
 export type PostStatus = "pending" | "processing" | "posted" | "failed" | "canceled";
 
@@ -51,11 +52,17 @@ export const PostsService = {
     return path;
   },
 
-  async publishNow(platform: SocialPlatform, accountId: string, storagePath: string, caption: string): Promise<string> {
+  async publishNow(
+    platform: SocialPlatform,
+    accountId: string,
+    storagePath: string,
+    caption: string,
+    options?: PostOptions
+  ): Promise<string> {
     const functionName =
       platform === "youtube" ? "youtube-publish" : platform === "instagram" ? "instagram-publish" : "tiktok-publish-upload";
     const { data, error } = await supabase.functions.invoke(functionName, {
-      body: { accountId, storagePath, caption },
+      body: { accountId, storagePath, caption, options },
     });
     if (error) {
       const message = await readEdgeFunctionErrorMessage(error, `Erro ao publicar no ${platform}.`);
@@ -84,7 +91,14 @@ export const PostsService = {
   },
 
   async schedulePosts(
-    items: { platform: SocialPlatform; accountId: string; storagePath: string; caption: string; scheduledAt: Date }[]
+    items: {
+      platform: SocialPlatform;
+      accountId: string;
+      storagePath: string;
+      caption: string;
+      scheduledAt: Date;
+      options?: PostOptions;
+    }[]
   ): Promise<void> {
     if (items.length === 0) return;
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -97,6 +111,7 @@ export const PostsService = {
         account_id: item.accountId,
         video_url: item.storagePath,
         caption: item.caption,
+        options: item.options ?? {},
         scheduled_at: item.scheduledAt.toISOString(),
         status: "pending",
       }))

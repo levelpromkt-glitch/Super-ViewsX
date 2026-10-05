@@ -58,7 +58,9 @@ serve(async (req) => {
     const start: number | undefined = body?.start;
     const end: number | undefined = body?.end;
     const storagePath: string | undefined = body?.storagePath;
-    const caption: string = String(body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
+    const opts = body?.options && typeof body.options === 'object' ? body.options : {};
+    const caption: string = String(typeof opts.caption === 'string' ? opts.caption : body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
+    const aiGenerated: boolean = opts.aiContent === true;
 
     if (!accountId) {
       return new Response(
@@ -99,6 +101,7 @@ serve(async (req) => {
         account_id: accountId,
         video_url: hasUploadSource ? storagePath! : `${videoId}:${start}-${end}`,
         caption,
+        options: { caption, aiContent: aiGenerated },
         scheduled_at: new Date().toISOString(),
         status: 'processing',
       })
@@ -197,7 +200,12 @@ serve(async (req) => {
     const createResponse = await fetch(createUrl.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_url: videoUrl, media_type: 'REELS', caption }),
+      body: JSON.stringify({
+        video_url: videoUrl,
+        media_type: 'REELS',
+        caption,
+        ...(aiGenerated ? { is_ai_generated: true } : {}),
+      }),
     });
     const createData = await createResponse.json().catch(() => null);
     if (!createResponse.ok || !createData?.id) {

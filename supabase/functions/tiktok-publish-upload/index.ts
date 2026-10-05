@@ -6,7 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MAX_CAPTION_LENGTH = 150;
+const MAX_CAPTION_LENGTH = 2200; // UTF-16 units, per TikTok's Direct Post docs
+const PRIVACY_VALUES = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -39,7 +40,13 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const storagePath: string = body?.storagePath;
-    const caption: string = String(body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
+    const opts = body?.options && typeof body.options === 'object' ? body.options : {};
+    const caption: string = String(typeof opts.caption === 'string' ? opts.caption : body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
+    const requestedPrivacy: string | undefined = PRIVACY_VALUES.includes(opts.privacy) ? opts.privacy : undefined;
+    const disableComment = opts.disableComment === true;
+    const disableDuet = opts.disableDuet === true;
+    const disableStitch = opts.disableStitch === true;
+    const isAigc = opts.aiContent === true;
     const accountId: string | undefined = body?.accountId;
 
     if (!storagePath || !storagePath.startsWith(`${user.id}/`)) {
@@ -79,6 +86,7 @@ serve(async (req) => {
         account_id: accountId,
         video_url: storagePath,
         caption,
+        options: { caption, privacy: requestedPrivacy, disableComment, disableDuet, disableStitch, aiContent: isAigc },
         scheduled_at: new Date().toISOString(),
         status: 'processing',
       })
@@ -134,7 +142,9 @@ serve(async (req) => {
     const videoBuffer = new Uint8Array(await fileBlob.arrayBuffer());
     const videoSize = videoBuffer.byteLength;
 
-    let privacyLevel = 'SELF_ONLY';
+    // Use the visibility the user picked when this account allows it; otherwise
+    // fall back to the most private option the account offers.
+    let privacyLevel = requestedPrivacy || 'SELF_ONLY';
     try {
       const creatorInfoResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
         method: 'POST',
@@ -143,7 +153,7 @@ serve(async (req) => {
       const creatorInfo = await creatorInfoResponse.json();
       const options: string[] = creatorInfo?.data?.privacy_level_options || [];
       if (options.length > 0 && !options.includes(privacyLevel)) {
-        privacyLevel = options[0];
+        privacyLevel = options.includes('SELF_ONLY') ? 'SELF_ONLY' : options[0];
       }
     } catch (e) {
       console.error('TikTok creator_info query failed', e);
@@ -156,9 +166,10 @@ serve(async (req) => {
         post_info: {
           title: caption,
           privacy_level: privacyLevel,
-          disable_duet: false,
-          disable_comment: false,
-          disable_stitch: false,
+          disable_duet: disableDuet,
+          disable_comment: disableComment,
+          disable_stitch: disableStitch,
+          is_aigc: isAigc,
         },
         source_info: {
           source: 'FILE_UPLOAD',

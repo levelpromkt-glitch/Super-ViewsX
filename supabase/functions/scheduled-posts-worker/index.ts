@@ -72,6 +72,18 @@ serve(async (req) => {
       }
 
       let publishedId: string;
+      // Per-platform settings chosen when the post was scheduled; rows created
+      // before this existed have an empty object and keep the old defaults.
+      const opts = post.options && typeof post.options === 'object' ? post.options : {};
+      const PRIVACY_VALUES = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
+      const YT_PRIVACY = ['public', 'unlisted', 'private'];
+      const stripAngleBrackets = (s: string) => s.replace(/[<>]/g, '');
+      const clampBytes = (s: string, max: number) => {
+        const enc = new TextEncoder();
+        let out = s;
+        while (enc.encode(out).length > max) out = out.slice(0, -1);
+        return out;
+      };
 
       if (post.platform === 'instagram') {
         // Instagram's container API fetches the video from a public URL
@@ -104,10 +116,16 @@ serve(async (req) => {
         const igUserId = account.platform_user_id;
         const createUrl = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${igUserId}/media`);
         createUrl.searchParams.set('access_token', accessToken);
+        const igCaption = String(typeof opts.caption === 'string' ? opts.caption : post.caption || '').slice(0, 2200);
         const createResponse = await fetch(createUrl.toString(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_url: signed.signedUrl, media_type: 'REELS', caption: post.caption || '' }),
+          body: JSON.stringify({
+            video_url: signed.signedUrl,
+            media_type: 'REELS',
+            caption: igCaption,
+            ...(opts.aiContent === true ? { is_ai_generated: true } : {}),
+          }),
         });
         const createData = await createResponse.json().catch(() => null);
         if (!createResponse.ok || !createData?.id) {
@@ -190,7 +208,7 @@ serve(async (req) => {
           }
         }
 
-        let privacyLevel = 'SELF_ONLY';
+        let privacyLevel = PRIVACY_VALUES.includes(opts.privacy) ? opts.privacy : 'SELF_ONLY';
         try {
           const creatorInfoResponse = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
             method: 'POST',
@@ -199,7 +217,7 @@ serve(async (req) => {
           const creatorInfo = await creatorInfoResponse.json();
           const options: string[] = creatorInfo?.data?.privacy_level_options || [];
           if (options.length > 0 && !options.includes(privacyLevel)) {
-            privacyLevel = options[0];
+            privacyLevel = options.includes('SELF_ONLY') ? 'SELF_ONLY' : options[0];
           }
         } catch (e) {
           console.error('creator_info query failed', e);
@@ -210,11 +228,12 @@ serve(async (req) => {
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             post_info: {
-              title: post.caption || '',
+              title: String(typeof opts.caption === 'string' ? opts.caption : post.caption || '').slice(0, 2200),
               privacy_level: privacyLevel,
-              disable_duet: false,
-              disable_comment: false,
-              disable_stitch: false,
+              disable_duet: opts.disableDuet === true,
+              disable_comment: opts.disableComment === true,
+              disable_stitch: opts.disableStitch === true,
+              is_aigc: opts.aiContent === true,
             },
             source_info: {
               source: 'FILE_UPLOAD',
@@ -279,8 +298,15 @@ serve(async (req) => {
               'X-Upload-Content-Length': String(videoSize),
             },
             body: JSON.stringify({
-              snippet: { title: post.caption || 'Corte Super Views X', description: `${post.caption || ''}\n\n#Shorts` },
-              status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+              snippet: {
+                title: stripAngleBrackets(String(typeof opts.title === 'string' ? opts.title : post.caption || '')).trim().slice(0, 100) || 'Corte Super Views X',
+                description: clampBytes(stripAngleBrackets(String(typeof opts.description === 'string' ? opts.description : post.caption || '')), 5000),
+              },
+              status: {
+                privacyStatus: YT_PRIVACY.includes(opts.privacy) ? opts.privacy : 'private',
+                selfDeclaredMadeForKids: opts.madeForKids === true,
+                containsSyntheticMedia: opts.aiContent === true,
+              },
             }),
           }
         );

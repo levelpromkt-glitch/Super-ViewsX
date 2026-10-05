@@ -7,6 +7,17 @@ const corsHeaders = {
 };
 
 const MAX_TITLE_LENGTH = 100;
+const MAX_DESCRIPTION_BYTES = 5000;
+const PRIVACY_VALUES = ['public', 'unlisted', 'private'];
+
+// YouTube rejects < and > in titles/descriptions and caps the description by UTF-8 bytes.
+const stripAngleBrackets = (s: string) => s.replace(/[<>]/g, '');
+const clampBytes = (s: string, max: number) => {
+  const enc = new TextEncoder();
+  let out = s;
+  while (enc.encode(out).length > max) out = out.slice(0, -1);
+  return out;
+};
 
 // Accepts EITHER {videoId, start, end} (cuts via our clip-video pipeline,
 // same as the "Publicar no TikTok" button in Melhores Momentos) OR
@@ -48,7 +59,17 @@ serve(async (req) => {
     const start: number | undefined = body?.start;
     const end: number | undefined = body?.end;
     const storagePath: string | undefined = body?.storagePath;
-    const title: string = String(body?.caption || 'Corte Super Views X').slice(0, MAX_TITLE_LENGTH);
+    const opts = body?.options && typeof body.options === 'object' ? body.options : {};
+    const rawTitle: string = typeof opts.title === 'string' ? opts.title : String(body?.caption || '');
+    const title: string = stripAngleBrackets(rawTitle).trim().slice(0, MAX_TITLE_LENGTH) || 'Corte Super Views X';
+    const description: string = clampBytes(
+      stripAngleBrackets(typeof opts.description === 'string' ? opts.description : title),
+      MAX_DESCRIPTION_BYTES
+    );
+    // Falls back to private (the safe choice) when the visibility is missing or unknown.
+    const privacy: string = PRIVACY_VALUES.includes(opts.privacy) ? opts.privacy : 'private';
+    const madeForKids: boolean = opts.madeForKids === true;
+    const aiContent: boolean = opts.aiContent === true;
 
     if (!accountId) {
       return new Response(
@@ -89,6 +110,7 @@ serve(async (req) => {
         account_id: accountId,
         video_url: hasUploadSource ? storagePath! : `${videoId}:${start}-${end}`,
         caption: title,
+        options: { title, description, privacy, madeForKids, aiContent },
         scheduled_at: new Date().toISOString(),
         status: 'processing',
       })
@@ -203,10 +225,10 @@ serve(async (req) => {
           'X-Upload-Content-Length': String(videoSize),
         },
         body: JSON.stringify({
-          snippet: { title, description: `${title}\n\n#Shorts` },
-          // "private" by default — safe while the Google OAuth app is in
-          // Testing status. Change once ready to actually publish publicly.
-          status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+          snippet: { title, description },
+          // Note: while the API project is unverified, Google forces every
+          // upload to private no matter which privacyStatus is sent.
+          status: { privacyStatus: privacy, selfDeclaredMadeForKids: madeForKids, containsSyntheticMedia: aiContent },
         }),
       }
     );
