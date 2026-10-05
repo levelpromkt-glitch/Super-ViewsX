@@ -30,6 +30,7 @@ import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/c
 import { SocialAccountsService, SocialAccountsError, ConnectedAccount } from "@/services/socialAccountsService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
+import { VideoPicker } from "@/components/melhores-momentos/VideoPicker";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -573,21 +574,15 @@ function MelhoresMomentosPage() {
               onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
             />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-              <input
-                className="tr-input"
-                type="file"
-                accept="video/*"
-                onChange={(e) => {
-                  setUploadFile(e.target.files?.[0] || null);
-                  if (urlError) setUrlError(null);
-                }}
-                style={{ padding: 10 }}
-              />
-              <span style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>
-                Até {Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — ou arraste e solte o arquivo em qualquer lugar desta área.
-              </span>
-            </div>
+            <VideoPicker
+              file={uploadFile}
+              onPick={(f) => {
+                setUploadFile(f);
+                setUrlError(null);
+              }}
+              onRemove={() => setUploadFile(null)}
+              hint={`Até ${Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — ou arraste e solte o arquivo em qualquer lugar desta área.`}
+            />
           )}
           <div className="hs-period" ref={durationRef}>
             <button
