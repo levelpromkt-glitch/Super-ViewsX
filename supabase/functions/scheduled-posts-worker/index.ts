@@ -77,6 +77,10 @@ serve(async (req) => {
       const opts = post.options && typeof post.options === 'object' ? post.options : {};
       const PRIVACY_VALUES = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
       const YT_PRIVACY = ['public', 'unlisted', 'private'];
+      const cleanUsernames = (value: unknown, max: number): string[] =>
+        Array.isArray(value)
+          ? [...new Set(value.map((v) => String(v).trim().replace(/^@+/, '').toLowerCase()).filter((n) => /^[a-z0-9._]{1,30}$/.test(n)))].slice(0, max)
+          : [];
       const stripAngleBrackets = (s: string) => s.replace(/[<>]/g, '');
       const clampBytes = (s: string, max: number) => {
         const enc = new TextEncoder();
@@ -117,6 +121,8 @@ serve(async (req) => {
         const createUrl = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${igUserId}/media`);
         createUrl.searchParams.set('access_token', accessToken);
         const igCaption = String(typeof opts.caption === 'string' ? opts.caption : post.caption || '').slice(0, 2200);
+        const igUserTags = cleanUsernames(opts.userTags, 20);
+        const igCollaborators = cleanUsernames(opts.collaborators, 3);
         const createResponse = await fetch(createUrl.toString(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -125,6 +131,8 @@ serve(async (req) => {
             media_type: 'REELS',
             caption: igCaption,
             ...(opts.aiContent === true ? { is_ai_generated: true } : {}),
+            ...(igUserTags.length > 0 ? { user_tags: igUserTags.map((username) => ({ username })) } : {}),
+            ...(igCollaborators.length > 0 ? { collaborators: igCollaborators } : {}),
           }),
         });
         const createData = await createResponse.json().catch(() => null);

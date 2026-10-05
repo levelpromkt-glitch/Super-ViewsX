@@ -8,6 +8,16 @@ const corsHeaders = {
 
 const MAX_CAPTION_LENGTH = 2200;
 const GRAPH_VERSION = "v26.0";
+const MAX_USER_TAGS = 20;
+const MAX_COLLABORATORS = 3;
+const USERNAME_RE = /^[a-z0-9._]{1,30}$/;
+
+// Normalizes "@Fulano" -> "fulano", drops anything that isn't a valid
+// Instagram username, removes duplicates and caps the list size.
+const cleanUsernames = (value: unknown, max: number): string[] =>
+  Array.isArray(value)
+    ? [...new Set(value.map((v) => String(v).trim().replace(/^@+/, '').toLowerCase()).filter((n) => USERNAME_RE.test(n)))].slice(0, max)
+    : [];
 // Instagram processes the container asynchronously — poll status_code until
 // FINISHED, capped so this stays well under the Edge Function's wall-clock
 // limit even though most Reels finish processing in well under a minute.
@@ -61,6 +71,8 @@ serve(async (req) => {
     const opts = body?.options && typeof body.options === 'object' ? body.options : {};
     const caption: string = String(typeof opts.caption === 'string' ? opts.caption : body?.caption || '').slice(0, MAX_CAPTION_LENGTH);
     const aiGenerated: boolean = opts.aiContent === true;
+    const userTags = cleanUsernames(opts.userTags, MAX_USER_TAGS);
+    const collaborators = cleanUsernames(opts.collaborators, MAX_COLLABORATORS);
 
     if (!accountId) {
       return new Response(
@@ -101,7 +113,7 @@ serve(async (req) => {
         account_id: accountId,
         video_url: hasUploadSource ? storagePath! : `${videoId}:${start}-${end}`,
         caption,
-        options: { caption, aiContent: aiGenerated },
+        options: { caption, aiContent: aiGenerated, userTags, collaborators },
         scheduled_at: new Date().toISOString(),
         status: 'processing',
       })
@@ -205,6 +217,8 @@ serve(async (req) => {
         media_type: 'REELS',
         caption,
         ...(aiGenerated ? { is_ai_generated: true } : {}),
+        ...(userTags.length > 0 ? { user_tags: userTags.map((username) => ({ username })) } : {}),
+        ...(collaborators.length > 0 ? { collaborators } : {}),
       }),
     });
     const createData = await createResponse.json().catch(() => null);

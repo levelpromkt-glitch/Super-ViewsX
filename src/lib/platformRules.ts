@@ -6,6 +6,9 @@ export const LIMITS = {
   tiktokCaption: 2200,
   instagramCaption: 2200,
   instagramHashtags: 30,
+  instagramMentions: 20,
+  instagramUserTags: 20,
+  instagramCollaborators: 3,
 } as const;
 
 // Flip to true once Google/TikTok audit the app. Until then both platforms
@@ -41,13 +44,13 @@ export type PlatformSettings = {
     allowStitch: boolean;
     aiContent: boolean;
   };
-  instagram: { caption: string | null; aiContent: boolean };
+  instagram: { caption: string | null; aiContent: boolean; userTags: string[]; collaborators: string[] };
 };
 
 export const defaultSettings = (): PlatformSettings => ({
   youtube: { title: null, description: null, privacy: "public", madeForKids: false, aiContent: false },
   tiktok: { caption: null, privacy: null, allowComment: true, allowDuet: true, allowStitch: true, aiContent: false },
-  instagram: { caption: null, aiContent: false },
+  instagram: { caption: null, aiContent: false, userTags: [], collaborators: [] },
 });
 
 export type YoutubeOptions = {
@@ -65,7 +68,7 @@ export type TikTokOptions = {
   disableStitch: boolean;
   aiContent: boolean;
 };
-export type InstagramOptions = { caption: string; aiContent: boolean };
+export type InstagramOptions = { caption: string; aiContent: boolean; userTags: string[]; collaborators: string[] };
 export type PostOptions = YoutubeOptions | TikTokOptions | InstagramOptions;
 
 export type TikTokCreatorInfo = {
@@ -79,6 +82,16 @@ export type TikTokCreatorInfo = {
 export const byteLength = (s: string) => new TextEncoder().encode(s).length;
 
 export const countHashtags = (s: string) => (s.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+
+const INSTAGRAM_USERNAME = /^[a-z0-9._]{1,30}$/;
+
+// "@Fulano " -> "fulano"; returns null when it isn't a valid Instagram username.
+export function normalizeInstagramUsername(raw: string): string | null {
+  const name = raw.trim().replace(/^@+/, "").toLowerCase();
+  return INSTAGRAM_USERNAME.test(name) ? name : null;
+}
+
+export const countMentions = (s: string) => (s.match(/@[A-Za-z0-9._]+/g) || []).length;
 
 // First line of the general caption, cut at a word boundary to fit the title limit.
 export function defaultYoutubeTitle(base: string) {
@@ -112,7 +125,7 @@ export function resolveTikTok(base: string, s: PlatformSettings["tiktok"], priva
 }
 
 export function resolveInstagram(base: string, s: PlatformSettings["instagram"]): InstagramOptions {
-  return { caption: s.caption ?? base, aiContent: s.aiContent };
+  return { caption: s.caption ?? base, aiContent: s.aiContent, userTags: s.userTags, collaborators: s.collaborators };
 }
 
 export function validateYoutube(o: YoutubeOptions): string[] {
@@ -139,6 +152,10 @@ export function validateInstagram(o: InstagramOptions): string[] {
   if (o.caption.length > LIMITS.instagramCaption) errors.push(`A legenda passa de ${LIMITS.instagramCaption} caracteres.`);
   const tags = countHashtags(o.caption);
   if (tags > LIMITS.instagramHashtags) errors.push(`A legenda tem ${tags} hashtags e o Instagram aceita no máximo ${LIMITS.instagramHashtags}.`);
+  const mentions = countMentions(o.caption);
+  if (mentions > LIMITS.instagramMentions) errors.push(`A legenda tem ${mentions} menções (@) e o Instagram aceita no máximo ${LIMITS.instagramMentions}.`);
+  if (o.userTags.length > LIMITS.instagramUserTags) errors.push(`Marque no máximo ${LIMITS.instagramUserTags} pessoas no vídeo.`);
+  if (o.collaborators.length > LIMITS.instagramCollaborators) errors.push(`O Instagram aceita no máximo ${LIMITS.instagramCollaborators} colaboradores.`);
   return errors;
 }
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AlertCircle, RotateCcw } from "lucide-react";
+import { useState, type KeyboardEvent } from "react";
+import { AlertCircle, RotateCcw, X } from "lucide-react";
 import { PlatformLogo } from "@/components/social/PlatformLogo";
 import {
   LIMITS,
@@ -8,6 +8,8 @@ import {
   YOUTUBE_PRIVACY_LABELS,
   byteLength,
   countHashtags,
+  countMentions,
+  normalizeInstagramUsername,
   type InstagramOptions,
   type PlatformSettings,
   type PostPlan,
@@ -37,6 +39,86 @@ function FollowsGeneral({ overridden, onReset }: { overridden: boolean; onReset:
     </button>
   ) : (
     <span className="pb-hint">Seguindo o texto geral</span>
+  );
+}
+
+function UsernameField({
+  label,
+  hint,
+  values,
+  max,
+  onAdd,
+  onRemove,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  values?: string[];
+  max?: number;
+  onAdd: (username: string) => void;
+  onRemove?: (username: string) => void;
+  disabled?: boolean;
+}) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const full = max !== undefined && (values?.length ?? 0) >= max;
+
+  const submit = () => {
+    if (!text.trim()) return;
+    const name = normalizeInstagramUsername(text);
+    if (!name) {
+      setError("Usuário inválido. Use só letras, números, ponto e underline.");
+      return;
+    }
+    if (values?.includes(name)) {
+      setError("Esse usuário já foi adicionado.");
+      return;
+    }
+    onAdd(name);
+    setText("");
+    setError(null);
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  return (
+    <div className="pb-ufield">
+      <div className="pb-field-head">
+        <span className="pb-flabel">{label}</span>
+        {max !== undefined && <Counter value={values?.length ?? 0} max={max} />}
+      </div>
+      <div className="pb-ufield-row">
+        <input
+          className="pb-input"
+          value={text}
+          disabled={disabled || full}
+          placeholder={full ? "Limite atingido" : "@usuario"}
+          onChange={(e) => {
+            setText(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={onKey}
+        />
+        <button type="button" className="hs-btn-ghost" style={{ flex: "none" }} disabled={disabled || full || !text.trim()} onClick={submit}>
+          Adicionar
+        </button>
+      </div>
+      {error ? <span className="pb-field-error">{error}</span> : <span className="pb-hint">{hint}</span>}
+      {values && values.length > 0 && (
+        <div className="pb-uchips">
+          {values.map((u) => (
+            <button key={u} type="button" className="pb-uchip" disabled={disabled} onClick={() => onRemove?.(u)} title="Remover">
+              @{u} <X size={10} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -271,9 +353,41 @@ export function ContentSection({
               placeholder="Legenda do Reel"
               onChange={(e) => setIg({ caption: e.target.value })}
             />
-            <span className={`pb-hint${countHashtags(ig.caption) > LIMITS.instagramHashtags ? " pb-field-error" : ""}`}>
-              Hashtags: {countHashtags(ig.caption)}/{LIMITS.instagramHashtags}
-            </span>
+            <div className="pb-meta-row">
+              <span className={countHashtags(ig.caption) > LIMITS.instagramHashtags ? "pb-field-error" : "pb-hint"}>
+                Hashtags: {countHashtags(ig.caption)}/{LIMITS.instagramHashtags}
+              </span>
+              <span className={countMentions(ig.caption) > LIMITS.instagramMentions ? "pb-field-error" : "pb-hint"}>
+                Menções: {countMentions(ig.caption)}/{LIMITS.instagramMentions}
+              </span>
+            </div>
+            <UsernameField
+              label="Mencionar na legenda"
+              hint="Coloca @usuario no fim da legenda. A pessoa recebe uma notificação."
+              disabled={disabled}
+              onAdd={(u) => {
+                if (new RegExp(`@${u.replace(/\./g, "\\.")}(?![A-Za-z0-9._])`, "i").test(ig.caption)) return;
+                setIg({ caption: `${ig.caption.trimEnd()}${ig.caption.trim() ? " " : ""}@${u}` });
+              }}
+            />
+            <UsernameField
+              label="Marcar no vídeo"
+              hint="Aparece como marcação no Reel. A conta marcada precisa ser pública."
+              values={settings.instagram.userTags}
+              max={LIMITS.instagramUserTags}
+              disabled={disabled}
+              onAdd={(u) => setIg({ userTags: [...settings.instagram.userTags, u] })}
+              onRemove={(u) => setIg({ userTags: settings.instagram.userTags.filter((x) => x !== u) })}
+            />
+            <UsernameField
+              label="Convidar colaboradores"
+              hint="O post aparece também no perfil deles, depois que aceitarem o convite."
+              values={settings.instagram.collaborators}
+              max={LIMITS.instagramCollaborators}
+              disabled={disabled}
+              onAdd={(u) => setIg({ collaborators: [...settings.instagram.collaborators, u] })}
+              onRemove={(u) => setIg({ collaborators: settings.instagram.collaborators.filter((x) => x !== u) })}
+            />
             <Check checked={settings.instagram.aiContent} disabled={disabled} onChange={(v) => setIg({ aiContent: v })}>
               Conteúdo gerado por IA
             </Check>
