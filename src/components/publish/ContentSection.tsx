@@ -362,15 +362,6 @@ export function ContentSection({
               </span>
             </div>
             <UsernameField
-              label="Mencionar na legenda"
-              hint="Coloca @usuario no fim da legenda. A pessoa recebe uma notificação."
-              disabled={disabled}
-              onAdd={(u) => {
-                if (new RegExp(`@${u.replace(/\./g, "\\.")}(?![A-Za-z0-9._])`, "i").test(ig.caption)) return;
-                setIg({ caption: `${ig.caption.trimEnd()}${ig.caption.trim() ? " " : ""}@${u}` });
-              }}
-            />
-            <UsernameField
               label="Marcar no vídeo"
               hint="Aparece como marcação no Reel. A conta marcada precisa ser pública."
               values={settings.instagram.userTags}
@@ -378,15 +369,6 @@ export function ContentSection({
               disabled={disabled}
               onAdd={(u) => setIg({ userTags: [...settings.instagram.userTags, u] })}
               onRemove={(u) => setIg({ userTags: settings.instagram.userTags.filter((x) => x !== u) })}
-            />
-            <UsernameField
-              label="Convidar colaboradores"
-              hint="O post aparece também no perfil deles, depois que aceitarem o convite."
-              values={settings.instagram.collaborators}
-              max={LIMITS.instagramCollaborators}
-              disabled={disabled}
-              onAdd={(u) => setIg({ collaborators: [...settings.instagram.collaborators, u] })}
-              onRemove={(u) => setIg({ collaborators: settings.instagram.collaborators.filter((x) => x !== u) })}
             />
             <Check checked={settings.instagram.aiContent} disabled={disabled} onChange={(v) => setIg({ aiContent: v })}>
               Conteúdo gerado por IA

@@ -8,7 +8,6 @@ export const LIMITS = {
   instagramHashtags: 30,
   instagramMentions: 20,
   instagramUserTags: 20,
-  instagramCollaborators: 3,
 } as const;
 
 // Flip to true once Google/TikTok audit the app. Until then both platforms
@@ -44,13 +43,13 @@ export type PlatformSettings = {
     allowStitch: boolean;
     aiContent: boolean;
   };
-  instagram: { caption: string | null; aiContent: boolean; userTags: string[]; collaborators: string[] };
+  instagram: { caption: string | null; aiContent: boolean; userTags: string[] };
 };
 
 export const defaultSettings = (): PlatformSettings => ({
   youtube: { title: null, description: null, privacy: "public", madeForKids: false, aiContent: false },
   tiktok: { caption: null, privacy: null, allowComment: true, allowDuet: true, allowStitch: true, aiContent: false },
-  instagram: { caption: null, aiContent: false, userTags: [], collaborators: [] },
+  instagram: { caption: null, aiContent: false, userTags: [] },
 });
 
 export type YoutubeOptions = {
@@ -68,7 +67,7 @@ export type TikTokOptions = {
   disableStitch: boolean;
   aiContent: boolean;
 };
-export type InstagramOptions = { caption: string; aiContent: boolean; userTags: string[]; collaborators: string[] };
+export type InstagramOptions = { caption: string; aiContent: boolean; userTags: string[] };
 export type PostOptions = YoutubeOptions | TikTokOptions | InstagramOptions;
 
 export type TikTokCreatorInfo = {
@@ -125,7 +124,7 @@ export function resolveTikTok(base: string, s: PlatformSettings["tiktok"], priva
 }
 
 export function resolveInstagram(base: string, s: PlatformSettings["instagram"]): InstagramOptions {
-  return { caption: s.caption ?? base, aiContent: s.aiContent, userTags: s.userTags, collaborators: s.collaborators };
+  return { caption: s.caption ?? base, aiContent: s.aiContent, userTags: s.userTags };
 }
 
 export function validateYoutube(o: YoutubeOptions): string[] {
@@ -155,7 +154,6 @@ export function validateInstagram(o: InstagramOptions): string[] {
   const mentions = countMentions(o.caption);
   if (mentions > LIMITS.instagramMentions) errors.push(`A legenda tem ${mentions} menções (@) e o Instagram aceita no máximo ${LIMITS.instagramMentions}.`);
   if (o.userTags.length > LIMITS.instagramUserTags) errors.push(`Marque no máximo ${LIMITS.instagramUserTags} pessoas no vídeo.`);
-  if (o.collaborators.length > LIMITS.instagramCollaborators) errors.push(`O Instagram aceita no máximo ${LIMITS.instagramCollaborators} colaboradores.`);
   return errors;
 }
 
