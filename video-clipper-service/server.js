@@ -29,6 +29,9 @@ const SOURCE_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
 const SOURCE_CACHE_MIN_FREE_BYTES = 3 * 1024 ** 3;
 fs.mkdirSync(SOURCE_CACHE_DIR, { recursive: true });
 const inFlightSourceDownloads = new Map();
+// One download at a time: the VM has a single slow link, and parallel downloads
+// starve the transcription/API calls running alongside them.
+let sourceDownloadQueue = Promise.resolve();
 
 function sourceCacheKey(sourceUrl) {
   try {
@@ -88,7 +91,7 @@ function ensureCachedSource(sourceUrl) {
   if (fs.existsSync(finalPath)) return Promise.resolve(finalPath);
   if (inFlightSourceDownloads.has(key)) return inFlightSourceDownloads.get(key);
 
-  const task = (async () => {
+  const task = sourceDownloadQueue.then(async () => {
     const partPath = `${finalPath}.part`;
     try {
       pruneSourceCache();
@@ -110,7 +113,8 @@ function ensureCachedSource(sourceUrl) {
     } finally {
       inFlightSourceDownloads.delete(key);
     }
-  })();
+  });
+  sourceDownloadQueue = task.catch(() => {});
   inFlightSourceDownloads.set(key, task);
   return task;
 }
