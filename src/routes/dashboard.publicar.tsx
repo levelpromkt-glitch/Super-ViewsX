@@ -322,7 +322,7 @@ function PublicarPage() {
     .map(accountName);
 
   return (
-    <div className="hs-page">
+    <div className="hs-page pb-page">
       <div className="pb-tabs">
         <button type="button" className={`pb-tab${tab === "create" ? " active" : ""}`} onClick={() => setTab("create")}>
           <Send size={13} /> Publicar
@@ -408,21 +408,7 @@ function PublicarPage() {
                 </div>
 
                 <div className="pb-section">
-                  <span className="pb-label">2. Conteúdo</span>
-                  <ContentSection
-                    platforms={selectedPlatforms}
-                    base={base}
-                    onBase={setBase}
-                    settings={settings}
-                    onSettings={setSettings}
-                    plan={plan}
-                    tiktok={tiktokUi}
-                    disabled={submitting}
-                  />
-                </div>
-
-                <div className="pb-section">
-                  <span className="pb-label">3. Quando publicar</span>
+                  <span className="pb-label">2. Quando publicar</span>
                   <div className="pb-radios">
                     <label className="pb-radio">
                       <input type="radio" name="when" checked={mode === "now"} disabled={submitting} onChange={() => chooseMode("now")} />
@@ -442,6 +428,20 @@ function PublicarPage() {
                       {scheduleInPast && <span className="pb-field-error">Esse horário já passou. Escolha um horário no futuro.</span>}
                     </>
                   )}
+                </div>
+
+                <div className="pb-section">
+                  <span className="pb-label">3. Conteúdo</span>
+                  <ContentSection
+                    platforms={selectedPlatforms}
+                    base={base}
+                    onBase={setBase}
+                    settings={settings}
+                    onSettings={setSettings}
+                    plan={plan}
+                    tiktok={tiktokUi}
+                    disabled={submitting}
+                  />
                 </div>
 
                 {formError && <div className="tr-error">{formError}</div>}
