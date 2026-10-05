@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Camera, CheckCircle2, Link2, Loader2, LogOut, Pencil, Plus } from "lucide-react";
+import { CheckCircle2, Link2, Loader2, LogOut, Pencil, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/configuracoes")({
   component: ConfiguracoesPage,
@@ -12,18 +12,15 @@ import {
   ConnectedAccount,
   SocialPlatform,
 } from "@/services/socialAccountsService";
+import { PlatformLogo } from "@/components/social/PlatformLogo";
 
-const PLATFORMS: {
-  id: SocialPlatform;
-  label: string;
-  logo?: string;
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
-  available: boolean;
-}[] = [
-  { id: "tiktok", label: "TikTok", logo: "/tiktok-logo.png", available: true },
-  { id: "youtube", label: "YouTube", logo: "/youtube-logo.png", available: true },
-  { id: "instagram", label: "Instagram", icon: Camera, available: true },
+const PLATFORMS: { id: SocialPlatform; label: string }[] = [
+  { id: "tiktok", label: "TikTok" },
+  { id: "youtube", label: "YouTube" },
+  { id: "instagram", label: "Instagram" },
 ];
+
+const PLATFORM_LABEL: Record<string, string> = Object.fromEntries(PLATFORMS.map((p) => [p.id, p.label]));
 
 // One row for one connected account, with inline rename (click the label to
 // edit) and its own disconnect button — a platform can now list several of
@@ -59,15 +56,8 @@ function AccountRow({
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 0",
-        borderTop: "1px solid var(--border-soft)",
-      }}
-    >
+    <div className="sa-account-row">
+      <PlatformLogo platform={account.platform} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
           <input
@@ -106,7 +96,7 @@ function AccountRow({
             {account.label || account.platform_username}
           </button>
         )}
-        <div style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>@{account.platform_username}</div>
+        <div style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>@{account.platform_username} · {PLATFORM_LABEL[account.platform] ?? account.platform}</div>
       </div>
       <button className="hs-btn-ghost" style={{ flex: "none" }} onClick={() => onDisconnect(account)} disabled={disconnecting}>
         {disconnecting ? <Loader2 size={12} className="tr-spin" /> : <LogOut size={12} />}
@@ -219,77 +209,48 @@ function ConfiguracoesPage() {
         {error && <div className="tr-error">{error}</div>}
       </section>
 
-      <section className="hs-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
+      <section className="sa-grid">
         {PLATFORMS.map((p) => {
-          const Icon = p.icon;
-          const connected = accountsFor(p.id);
+          const count = accountsFor(p.id).length;
           const isConnecting = connectingPlatform === p.id;
-
           return (
-            <article key={p.id} className="hs-card">
-              <div className="hs-card-body" style={{ gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 999,
-                      background: "rgba(158,255,46,0.08)",
-                      border: "1px solid rgba(158,255,46,0.2)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {p.logo ? (
-                      <img src={p.logo} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                    ) : (
-                      Icon && <Icon size={20} className="tr-icon-lime" />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 className="hs-card-title m-0" style={{ minHeight: 0 }}>{p.label}</h3>
-                    <span style={{ fontSize: ".78rem", color: "var(--text-muted)" }}>
-                      {!p.available
-                        ? "Em breve"
-                        : connected.length === 0
-                          ? "Nenhuma conta conectada"
-                          : `${connected.length} conta${connected.length > 1 ? "s" : ""} conectada${connected.length > 1 ? "s" : ""}`}
-                    </span>
-                  </div>
-                </div>
-
-                {p.available && connected.length > 0 && (
-                  <div>
-                    {connected.map((a) => (
-                      <AccountRow
-                        key={a.id}
-                        account={a}
-                        onRenamed={handleRenamed}
-                        onDisconnect={handleDisconnect}
-                        disconnecting={disconnectingId === a.id}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <div className="hs-card-actions" style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 12 }}>
-                  {!p.available ? (
-                    <button className="hs-btn-ghost" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
-                      Em breve
-                    </button>
-                  ) : (
-                    <button className="hs-btn-ghost" onClick={() => handleConnect(p.id)} disabled={isConnecting}>
-                      {isConnecting ? <Loader2 size={12} className="tr-spin" /> : <Plus size={12} />}
-                      Adicionar conta
-                    </button>
-                  )}
-                </div>
-              </div>
+            <article key={p.id} className="sa-tile">
+              {count > 0 && <span className="sa-tile-count">{count} {count === 1 ? "conta" : "contas"}</span>}
+              <PlatformLogo platform={p.id} size={64} />
+              <h3 className="sa-tile-name">{p.label}</h3>
+              <button className="sa-tile-btn" onClick={() => handleConnect(p.id)} disabled={isConnecting}>
+                {isConnecting ? <Loader2 size={13} className="tr-spin" /> : <Plus size={13} />}
+                Adicionar
+              </button>
             </article>
           );
         })}
+      </section>
+
+      <section className="tr-card tr-fade">
+        <div className="tr-card-head">
+          <Link2 size={18} className="tr-icon-lime" />
+          <h2>Contas conectadas{accounts && accounts.length > 0 ? ` (${accounts.length})` : ""}</h2>
+        </div>
+        <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {accounts === null ? (
+            <p className="tr-muted">Carregando...</p>
+          ) : accounts.length === 0 ? (
+            <div className="hs-empty">
+              <p>Nenhuma conta conectada ainda. Clique em Adicionar em uma das redes acima.</p>
+            </div>
+          ) : (
+            accounts.map((a) => (
+              <AccountRow
+                key={a.id}
+                account={a}
+                onRenamed={handleRenamed}
+                onDisconnect={handleDisconnect}
+                disconnecting={disconnectingId === a.id}
+              />
+            ))
+          )}
+        </div>
       </section>
     </div>
   );

@@ -3850,3 +3850,14 @@ a.tp-video:hover { border-color: rgba(158,255,46,.4); }
   .pb-layout { grid-template-columns: minmax(0, 1fr); }
   .pb-side { position: static; }
 }
+
+/* ===== Configurações: grid de redes + lista de contas ===== */
+.sa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.sa-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px 20px; background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 14px; transition: border-color .15s ease; }
+.sa-tile:hover { border-color: var(--border-hover); }
+.sa-tile-name { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-main); }
+.sa-tile-count { position: absolute; top: 10px; right: 10px; font-size: .68rem; font-weight: 700; color: var(--primary-lime); background: rgba(158,255,46,.1); border: 1px solid rgba(158,255,46,.3); border-radius: 99px; padding: 2px 9px; }
+.sa-tile-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 110px; padding: 8px 18px; border: 0; border-radius: 8px; background: var(--primary-lime); color: #0a0e0a; font-size: .8rem; font-weight: 700; cursor: pointer; transition: filter .15s ease; }
+.sa-tile-btn:hover { filter: brightness(1.08); }
+.sa-tile-btn:disabled { opacity: .6; cursor: default; }
+.sa-account-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: rgba(255,255,255,.02); }
