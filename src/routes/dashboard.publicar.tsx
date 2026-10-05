@@ -19,7 +19,7 @@ export const Route = createFileRoute("/dashboard/publicar")({
 
 import { PostsService, PostsError, ScheduledPost, MAX_UPLOAD_BYTES } from "@/services/postsService";
 import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccountsService";
-import { PostCard, PLATFORM_SHORT, accountName } from "@/components/publish/PostCard";
+import { PostCard, PLATFORM_SHORT, accountName, isDraftIncomplete } from "@/components/publish/PostCard";
 import { PlatformLogo } from "@/components/social/PlatformLogo";
 import {
   distributeDates,
@@ -51,9 +51,7 @@ function tomorrowDateValue() {
 function PublicarPage() {
   const [tab, setTab] = useState<"create" | "history">("create");
   const [accounts, setAccounts] = useState<ConnectedAccount[] | null>(null);
-  const [defaultAccountIds, setDefaultAccountIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<PostDraft[]>([]);
-  const [mode, setMode] = useState<"schedule" | "now">("schedule");
   const [startDate, setStartDate] = useState(tomorrowDateValue);
   const [times, setTimes] = useState<string[]>(DEFAULT_TIMES);
   const [newTime, setNewTime] = useState("");
@@ -74,8 +72,6 @@ function PublicarPage() {
   const [postsError, setPostsError] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
-  const requireDate = mode === "schedule";
-
   const loadPosts = () => {
     PostsService.listPosts()
       .then(setPosts)
@@ -87,7 +83,6 @@ function PublicarPage() {
       .then((all) => {
         const publishable = all.filter((a) => a.platform === "tiktok" || a.platform === "youtube" || a.platform === "instagram");
         setAccounts(publishable);
-        if (publishable.length === 1) setDefaultAccountIds([publishable[0].id]);
       })
       .catch(() => setAccounts([]));
     loadPosts();
@@ -110,6 +105,13 @@ function PublicarPage() {
       );
     }
 
+    const lastDraft = draftsRef.current[draftsRef.current.length - 1];
+    const inheritedAccountIds = lastDraft
+      ? [...lastDraft.accountIds]
+      : accounts && accounts.length === 1
+        ? [accounts[0].id]
+        : [];
+
     const created: PostDraft[] = ok.map((file) => ({
       id: crypto.randomUUID(),
       file,
@@ -117,7 +119,8 @@ function PublicarPage() {
       thumbnail: null,
       duration: null,
       caption: "",
-      accountIds: [...defaultAccountIds],
+      accountIds: [...inheritedAccountIds],
+      mode: "now",
       scheduledAt: "",
     }));
     setDrafts((prev) => [...prev, ...created]);
@@ -159,10 +162,8 @@ function PublicarPage() {
     addFiles(Array.from(e.dataTransfer.files || []));
   };
 
-  const toggleDefaultAccount = (id: string) =>
-    setDefaultAccountIds((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
-
-  const applyAccountsToAll = () => setDrafts((prev) => prev.map((d) => ({ ...d, accountIds: [...defaultAccountIds] })));
+  const applyAccountsToAll = (accountIds: string[]) =>
+    setDrafts((prev) => prev.map((d) => ({ ...d, accountIds: [...accountIds] })));
 
   const addTime = () => {
     if (!newTime || times.includes(newTime)) return;
@@ -178,15 +179,13 @@ function PublicarPage() {
       return;
     }
     setFormError(null);
-    setDrafts((prev) => prev.map((d, i) => ({ ...d, scheduledAt: dates[i] ?? d.scheduledAt })));
+    setDrafts((prev) => prev.map((d, i) => ({ ...d, mode: "schedule", scheduledAt: dates[i] ?? d.scheduledAt })));
   };
 
-  const isIncomplete = (d: PostDraft) =>
-    d.accountIds.length === 0 ||
-    (requireDate && (d.scheduledAt === "" || new Date(d.scheduledAt).getTime() <= Date.now()));
-
-  const incompleteCount = drafts.filter(isIncomplete).length;
+  const incompleteCount = drafts.filter(isDraftIncomplete).length;
   const totalPosts = drafts.reduce((sum, d) => sum + d.accountIds.length, 0);
+  const nowPosts = drafts.filter((d) => d.mode === "now").reduce((sum, d) => sum + d.accountIds.length, 0);
+  const scheduledPosts = totalPosts - nowPosts;
 
   const handleSubmit = async () => {
     setFormError(null);
@@ -203,7 +202,8 @@ function PublicarPage() {
 
     setSubmitting(true);
     const failures: string[] = [];
-    let okPosts = 0;
+    let okScheduled = 0;
+    let okNow = 0;
     const snapshot = [...drafts];
 
     for (let i = 0; i < snapshot.length; i++) {
@@ -221,7 +221,7 @@ function PublicarPage() {
         .map((id) => accounts?.find((a) => a.id === id))
         .filter((a): a is ConnectedAccount => !!a);
 
-      if (mode === "schedule") {
+      if (d.mode === "schedule") {
         try {
           await PostsService.schedulePosts(
             selected.map((a) => ({
@@ -232,7 +232,7 @@ function PublicarPage() {
               scheduledAt: new Date(d.scheduledAt),
             }))
           );
-          okPosts += selected.length;
+          okScheduled += selected.length;
           removeDraft(d.id);
         } catch (err: any) {
           failures.push(`${d.file.name}: ${err instanceof PostsError ? err.message : "falha ao agendar."}`);
@@ -243,7 +243,7 @@ function PublicarPage() {
           setSubmitStatus(`Publicando ${i + 1} de ${snapshot.length} no ${PLATFORM_SHORT[a.platform] ?? a.platform}...`);
           try {
             await PostsService.publishNow(a.platform, a.id, storagePath, d.caption);
-            okPosts += 1;
+            okNow += 1;
           } catch (err: any) {
             failedIds.push(a.id);
             failures.push(`${d.file.name} → ${accountName(a)}: ${err instanceof PostsError ? err.message : "falha ao publicar."}`);
@@ -258,10 +258,10 @@ function PublicarPage() {
     setSubmitStatus("");
     setShowErrors(false);
     loadPosts();
-    if (okPosts > 0) {
-      const verb = mode === "schedule" ? (okPosts === 1 ? "post agendado" : "posts agendados") : okPosts === 1 ? "post publicado" : "posts publicados";
-      setFormSuccess(`${okPosts} ${verb}.`);
-    }
+    const parts: string[] = [];
+    if (okScheduled > 0) parts.push(`${okScheduled} ${okScheduled === 1 ? "post agendado" : "posts agendados"}`);
+    if (okNow > 0) parts.push(`${okNow} ${okNow === 1 ? "post publicado" : "posts publicados"}`);
+    if (parts.length > 0) setFormSuccess(`${parts.join(" e ")}.`);
     if (failures.length > 0) setFormError(failures.join(" · "));
   };
 
@@ -302,8 +302,7 @@ function PublicarPage() {
             </div>
           )}
 
-          <div className="pb-layout">
-            <div className="pb-main">
+          <div className="pb-main">
               <div
                 className={`pb-dropzone${isDragging ? " active" : ""}${drafts.length > 0 ? " compact" : ""}`}
                 onDragEnter={handleDragEnter}
@@ -335,79 +334,9 @@ function PublicarPage() {
                 />
               </div>
 
-              {drafts.length > 0 && (
-                <div className="pb-grid">
-                  {drafts.map((d) => (
-                    <PostCard
-                      key={d.id}
-                      draft={d}
-                      accounts={accounts || []}
-                      requireDate={requireDate}
-                      showErrors={showErrors}
-                      disabled={submitting}
-                      onChange={(patch) => patchDraft(d.id, patch)}
-                      onRemove={() => removeDraft(d.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <aside className="pb-side">
-              <div className="pb-panel">
-                <p className="pb-panel-title">Quando publicar</p>
-                <div className="pb-seg">
-                  <button type="button" className={mode === "schedule" ? "active" : ""} onClick={() => setMode("schedule")}>
-                    <Calendar size={12} /> Agendar
-                  </button>
-                  <button type="button" className={mode === "now" ? "active" : ""} onClick={() => setMode("now")}>
-                    <Send size={12} /> Agora
-                  </button>
-                </div>
-              </div>
-
-              <div className="pb-panel">
-                <p className="pb-panel-title">Contas</p>
-                {accounts === null ? (
-                  <p className="pb-muted">Carregando...</p>
-                ) : (
-                  (["tiktok", "youtube", "instagram"] as const).map((platform) => {
-                    const group = accounts.filter((a) => a.platform === platform);
-                    if (group.length === 0) return null;
-                    return (
-                      <div key={platform} className="pb-acc-group">
-                        <span className="pb-acc-platform">
-                          <PlatformLogo platform={platform} size={18} /> {PLATFORM_SHORT[platform]}
-                        </span>
-                        {group.map((a) => (
-                          <label key={a.id} className="pb-acc-row">
-                            <input
-                              type="checkbox"
-                              checked={defaultAccountIds.includes(a.id)}
-                              onChange={() => toggleDefaultAccount(a.id)}
-                            />
-                            <PlatformLogo platform={a.platform} size={22} />
-                            {accountName(a)}
-                          </label>
-                        ))}
-                      </div>
-                    );
-                  })
-                )}
-                <button
-                  type="button"
-                  className="hs-btn-ghost pb-full"
-                  onClick={applyAccountsToAll}
-                  disabled={drafts.length === 0 || defaultAccountIds.length === 0}
-                >
-                  Aplicar a todos os cards
-                </button>
-                <span className="pb-hint">Novos vídeos já entram com estas contas.</span>
-              </div>
-
-              {mode === "schedule" && (
-                <div className="pb-panel">
-                  <p className="pb-panel-title">Distribuir automaticamente</p>
+              {drafts.length > 1 && (
+                <div className="pb-distribute">
+                  <span className="pb-label">Distribuir datas</span>
                   <label className="pb-field-row">
                     Início
                     <input
@@ -417,21 +346,18 @@ function PublicarPage() {
                       onChange={(e) => setStartDate(e.target.value)}
                     />
                   </label>
-                  <div className="pb-field-row" style={{ alignItems: "flex-start" }}>
-                    Horários
-                    <div className="pb-chips">
-                      {times.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          className="pb-chip pb-chip-on"
-                          onClick={() => setTimes((prev) => prev.filter((x) => x !== t))}
-                          title="Remover horário"
-                        >
-                          {t} <X size={10} />
-                        </button>
-                      ))}
-                    </div>
+                  <div className="pb-chips">
+                    {times.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="pb-chip pb-chip-on"
+                        onClick={() => setTimes((prev) => prev.filter((x) => x !== t))}
+                        title="Remover horário"
+                      >
+                        {t} <X size={10} />
+                      </button>
+                    ))}
                   </div>
                   <div className="pb-field-row">
                     <input
@@ -444,20 +370,38 @@ function PublicarPage() {
                       <Plus size={12} /> Horário
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    className="hs-btn-ghost"
+                    style={{ flex: "none" }}
+                    onClick={handleDistribute}
+                    disabled={times.length === 0}
+                  >
+                    <Calendar size={12} /> Programar todos
+                  </button>
                   <span className="pb-hint">
                     {times.length} {times.length === 1 ? "post" : "posts"} por dia, na ordem dos cards.
                   </span>
-                  <button
-                    type="button"
-                    className="hs-btn-ghost pb-full"
-                    onClick={handleDistribute}
-                    disabled={drafts.length === 0 || times.length === 0}
-                  >
-                    Distribuir datas
-                  </button>
                 </div>
               )}
-            </aside>
+
+              {drafts.length > 0 && (
+                <div className="pb-grid">
+                  {drafts.map((d) => (
+                    <PostCard
+                      key={d.id}
+                      draft={d}
+                      accounts={accounts || []}
+                      showErrors={showErrors}
+                      disabled={submitting}
+                      canApplyToAll={drafts.length > 1}
+                      onChange={(patch) => patchDraft(d.id, patch)}
+                      onRemove={() => removeDraft(d.id)}
+                      onApplyAccountsToAll={() => applyAccountsToAll(d.accountIds)}
+                    />
+                  ))}
+                </div>
+              )}
           </div>
 
           {formError && <div className="tr-error">{formError}</div>}
@@ -484,13 +428,14 @@ function PublicarPage() {
                 <>
                   <Loader2 size={16} className="tr-spin" /> {submitStatus || "Processando..."}
                 </>
-              ) : mode === "schedule" ? (
-                <>
-                  <Calendar size={16} /> Agendar {totalPosts > 0 ? `${totalPosts} ${totalPosts === 1 ? "post" : "posts"}` : ""}
-                </>
               ) : (
                 <>
-                  <Send size={16} /> Publicar {totalPosts > 0 ? `${totalPosts} ${totalPosts === 1 ? "post" : "posts"}` : ""} agora
+                  {scheduledPosts > 0 && nowPosts === 0 ? <Calendar size={16} /> : <Send size={16} />}
+                  {nowPosts === 0
+                    ? `Agendar ${totalPosts} ${totalPosts === 1 ? "post" : "posts"}`
+                    : scheduledPosts === 0
+                      ? `Publicar ${totalPosts} ${totalPosts === 1 ? "post" : "posts"} agora`
+                      : `Postar ${totalPosts} posts (${nowPosts} agora, ${scheduledPosts} programados)`}
                 </>
               )}
             </button>

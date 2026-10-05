@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, Calendar, Film, Play, Plus, X } from "lucide-react";
+import { AlertCircle, Check, Film, Play, X } from "lucide-react";
 import type { ConnectedAccount } from "@/services/socialAccountsService";
 import { PlatformLogo } from "@/components/social/PlatformLogo";
 import { formatDuration, type PostDraft } from "./postDraft";
@@ -12,35 +12,48 @@ export const PLATFORM_SHORT: Record<string, string> = {
 
 export const accountName = (a: ConnectedAccount) => a.label || a.platform_username || PLATFORM_SHORT[a.platform] || a.platform;
 
+export function isDraftIncomplete(d: PostDraft) {
+  return (
+    d.accountIds.length === 0 ||
+    (d.mode === "schedule" && (d.scheduledAt === "" || new Date(d.scheduledAt).getTime() <= Date.now()))
+  );
+}
+
 export function PostCard({
   draft,
   accounts,
-  requireDate,
   showErrors,
   disabled,
+  canApplyToAll,
   onChange,
   onRemove,
+  onApplyAccountsToAll,
 }: {
   draft: PostDraft;
   accounts: ConnectedAccount[];
-  requireDate: boolean;
   showErrors: boolean;
   disabled: boolean;
+  canApplyToAll: boolean;
   onChange: (patch: Partial<PostDraft>) => void;
   onRemove: () => void;
+  onApplyAccountsToAll: () => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [previewing, setPreviewing] = useState(false);
 
   const missingAccount = draft.accountIds.length === 0;
   const dateInPast = draft.scheduledAt !== "" && new Date(draft.scheduledAt).getTime() <= Date.now();
-  const missingDate = requireDate && (draft.scheduledAt === "" || dateInPast);
+  const missingDate = draft.mode === "schedule" && (draft.scheduledAt === "" || dateInPast);
   const hasError = showErrors && (missingAccount || missingDate);
 
   const toggleAccount = (id: string) =>
     onChange({
       accountIds: draft.accountIds.includes(id) ? draft.accountIds.filter((a) => a !== id) : [...draft.accountIds, id],
     });
+
+  const selectedNames = draft.accountIds
+    .map((id) => accounts.find((a) => a.id === id))
+    .filter((a): a is ConnectedAccount => !!a)
+    .map(accountName);
 
   return (
     <article className={`pb-card${hasError ? " pb-card-error" : ""}`}>
@@ -65,6 +78,42 @@ export function PostCard({
 
       <div className="pb-body">
         <div className="pb-filename" title={draft.file.name}>{draft.file.name}</div>
+
+        <div className="pb-accts">
+          <div className="pb-accts-head">
+            <span className="pb-label">Contas</span>
+            {canApplyToAll && !missingAccount && (
+              <button type="button" className="pb-link" disabled={disabled} onClick={onApplyAccountsToAll}>
+                Aplicar a todos
+              </button>
+            )}
+          </div>
+          <div className="pb-accts-list">
+            {accounts.map((a) => {
+              const on = draft.accountIds.includes(a.id);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`pb-acct${on ? " on" : ""}`}
+                  disabled={disabled}
+                  onClick={() => toggleAccount(a.id)}
+                  title={`${accountName(a)} (${PLATFORM_SHORT[a.platform] ?? a.platform})`}
+                  aria-pressed={on}
+                >
+                  <PlatformLogo platform={a.platform} size={30} />
+                  {on && (
+                    <span className="pb-acct-check">
+                      <Check size={9} strokeWidth={3} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {selectedNames.length > 0 && <span className="pb-selected-names">{selectedNames.join(" · ")}</span>}
+        </div>
+
         <textarea
           className="pb-caption"
           value={draft.caption}
@@ -74,51 +123,40 @@ export function PostCard({
           onChange={(e) => onChange({ caption: e.target.value })}
         />
 
-        <div className="pb-chips">
-          {draft.accountIds.map((id) => {
-            const acc = accounts.find((a) => a.id === id);
-            if (!acc) return null;
-            return (
-              <button
-                key={id}
-                type="button"
-                className="pb-chip pb-chip-on"
+        <div className="pb-when-block">
+          <span className="pb-label">Quando publicar</span>
+          <div className="pb-radios">
+            <label className="pb-radio">
+              <input
+                type="radio"
+                name={`when-${draft.id}`}
+                checked={draft.mode === "now"}
                 disabled={disabled}
-                onClick={() => toggleAccount(id)}
-                title="Remover esta conta"
-              >
-                <PlatformLogo platform={acc.platform} size={16} />
-                {accountName(acc)} <X size={10} />
-              </button>
-            );
-          })}
-          <button type="button" className="pb-chip" disabled={disabled} onClick={() => setPickerOpen((v) => !v)}>
-            <Plus size={10} /> {missingAccount ? "Escolher contas" : "Contas"}
-          </button>
-        </div>
-        {pickerOpen && (
-          <div className="pb-picker">
-            {accounts.map((a) => (
-              <label key={a.id} className="pb-picker-row">
-                <input type="checkbox" checked={draft.accountIds.includes(a.id)} onChange={() => toggleAccount(a.id)} />
-                <PlatformLogo platform={a.platform} size={20} />
-                {accountName(a)}
-              </label>
-            ))}
+                onChange={() => onChange({ mode: "now" })}
+              />
+              Agora
+            </label>
+            <label className="pb-radio">
+              <input
+                type="radio"
+                name={`when-${draft.id}`}
+                checked={draft.mode === "schedule"}
+                disabled={disabled}
+                onChange={() => onChange({ mode: "schedule" })}
+              />
+              Programar
+            </label>
           </div>
-        )}
-
-        {requireDate && (
-          <label className={`pb-when${showErrors && missingDate ? " pb-when-error" : ""}`}>
-            <Calendar size={12} />
+          {draft.mode === "schedule" && (
             <input
               type="datetime-local"
+              className={`pb-datetime${showErrors && missingDate ? " pb-datetime-error" : ""}`}
               value={draft.scheduledAt}
               disabled={disabled}
               onChange={(e) => onChange({ scheduledAt: e.target.value })}
             />
-          </label>
-        )}
+          )}
+        </div>
 
         {hasError && (
           <div className="pb-card-msg">

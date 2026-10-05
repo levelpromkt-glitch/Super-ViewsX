@@ -6,6 +6,7 @@ export type PostDraft = {
   duration: number | null;
   caption: string;
   accountIds: string[];
+  mode: "now" | "schedule";
   scheduledAt: string; // datetime-local value, "" when unset
 };
 
