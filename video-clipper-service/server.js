@@ -4,6 +4,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const { Readable } = require("stream");
+const { pipeline } = require("stream/promises");
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
@@ -14,6 +16,104 @@ const PORT = process.env.PORT || 8080;
 const API_KEY = process.env.CLIP_SERVICE_API_KEY;
 const MAX_CLIP_SECONDS = 180;
 const PROCESS_TIMEOUT_MS = 120000;
+
+// Source-video cache. The VM reads from R2 at only ~3 MB/s, so cutting a clip
+// out of the middle of a big episode by streaming it over HTTP blows through
+// the 2-minute process timeout. The transcription job already has to read the
+// whole file once, so it keeps a local copy here and later cuts read from disk
+// in seconds. Keyed by the object's path (not the signed URL, whose signature
+// changes on every request).
+const SOURCE_CACHE_DIR = process.env.SOURCE_CACHE_DIR || path.join(os.tmpdir(), "source-cache");
+const SOURCE_CACHE_MAX_BYTES = 15 * 1024 ** 3;
+const SOURCE_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
+const SOURCE_CACHE_MIN_FREE_BYTES = 3 * 1024 ** 3;
+fs.mkdirSync(SOURCE_CACHE_DIR, { recursive: true });
+const inFlightSourceDownloads = new Map();
+
+function sourceCacheKey(sourceUrl) {
+  try {
+    const parts = decodeURIComponent(new URL(sourceUrl).pathname).split("/").filter(Boolean);
+    if (parts.length === 0) return null;
+    return crypto.createHash("sha1").update(parts.slice(-2).join("/")).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+function cachedSourcePath(sourceUrl) {
+  const key = sourceCacheKey(sourceUrl);
+  if (!key) return null;
+  const filePath = path.join(SOURCE_CACHE_DIR, `${key}.mp4`);
+  if (!fs.existsSync(filePath)) return null;
+  const now = new Date();
+  try { fs.utimesSync(filePath, now, now); } catch { /* best effort: only used for eviction order */ }
+  return filePath;
+}
+
+// Local copy when we have one, otherwise the URL itself (ffmpeg streams it).
+function localSourceOrUrl(sourceUrl) {
+  return cachedSourcePath(sourceUrl) || sourceUrl;
+}
+
+function pruneSourceCache() {
+  try {
+    const now = Date.now();
+    const files = fs.readdirSync(SOURCE_CACHE_DIR)
+      .map((name) => {
+        const full = path.join(SOURCE_CACHE_DIR, name);
+        const st = fs.statSync(full);
+        return { full, name, size: st.size, mtime: st.mtimeMs };
+      })
+      .filter((f) => !(f.name.endsWith(".part") && inFlightSourceDownloads.size > 0));
+    let total = 0;
+    for (const f of files.sort((a, b) => b.mtime - a.mtime)) {
+      total += f.size;
+      if (now - f.mtime > SOURCE_CACHE_TTL_MS || total > SOURCE_CACHE_MAX_BYTES) {
+        fs.rmSync(f.full, { force: true });
+        total -= f.size;
+      }
+    }
+  } catch (err) {
+    console.error("source cache prune failed", err.message);
+  }
+}
+setInterval(pruneSourceCache, 60 * 60 * 1000);
+
+// Downloads the whole source once (no timeout: a 2h episode can take minutes)
+// and resolves to the local path, or null if it couldn't be cached.
+function ensureCachedSource(sourceUrl) {
+  const key = sourceCacheKey(sourceUrl);
+  if (!key) return Promise.resolve(null);
+  const finalPath = path.join(SOURCE_CACHE_DIR, `${key}.mp4`);
+  if (fs.existsSync(finalPath)) return Promise.resolve(finalPath);
+  if (inFlightSourceDownloads.has(key)) return inFlightSourceDownloads.get(key);
+
+  const task = (async () => {
+    const partPath = `${finalPath}.part`;
+    try {
+      pruneSourceCache();
+      const response = await fetch(sourceUrl);
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      const needed = Number(response.headers.get("content-length")) || 0;
+      const fsStats = fs.statfsSync(SOURCE_CACHE_DIR);
+      if (needed && fsStats.bavail * fsStats.bsize < needed + SOURCE_CACHE_MIN_FREE_BYTES) {
+        throw new Error("sem espaço em disco para o cache");
+      }
+      await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(partPath));
+      fs.renameSync(partPath, finalPath);
+      console.log("source cached", key, `${Math.round(fs.statSync(finalPath).size / 1048576)}MB`);
+      return finalPath;
+    } catch (err) {
+      console.error("source cache download failed", err.message);
+      fs.rmSync(partPath, { force: true });
+      return null;
+    } finally {
+      inFlightSourceDownloads.delete(key);
+    }
+  })();
+  inFlightSourceDownloads.set(key, task);
+  return task;
+}
 
 // Comma-separated "host:port" pool (e.g. Webshare's free datacenter proxies).
 // Routing yt-dlp through one of these instead of hitting YouTube directly
@@ -125,7 +225,7 @@ async function finishClip(res, tmpDir, filePath, vertical, filenameBase) {
 function runFfmpegCut(sourceUrl, s, e, outputPath) {
   return new Promise((resolve, reject) => {
     const ff = spawn("ffmpeg", [
-      "-y", "-ss", String(s), "-i", sourceUrl, "-t", String(e - s),
+      "-y", "-ss", String(s), "-i", localSourceOrUrl(sourceUrl), "-t", String(e - s),
       "-c", "copy", "-avoid_negative_ts", "make_zero", outputPath,
     ], { timeout: PROCESS_TIMEOUT_MS });
     let stderr = "";
@@ -206,6 +306,19 @@ async function handleSegmentedClip(req, res, sourceUrl, segments, vertical) {
   }
 }
 
+// Lets other services warm the cache for a source before the first cut.
+app.post("/prefetch", (req, res) => {
+  if (API_KEY && req.get("x-api-key") !== API_KEY) {
+    return res.status(401).json({ error: "UNAUTHORIZED" });
+  }
+  const { sourceUrl } = req.body || {};
+  if (typeof sourceUrl !== "string" || !sourceUrl.startsWith("http")) {
+    return res.status(400).json({ error: "INVALID_REQUEST" });
+  }
+  ensureCachedSource(sourceUrl).catch(() => {});
+  res.json({ ok: true, cached: !!cachedSourcePath(sourceUrl), downloading: inFlightSourceDownloads.size > 0 });
+});
+
 app.post("/clip", (req, res) => {
   if (API_KEY && req.get("x-api-key") !== API_KEY) {
     return res.status(401).json({ error: "UNAUTHORIZED" });
@@ -238,10 +351,11 @@ app.post("/clip", (req, res) => {
   // cookies, no bot-check, because YouTube is never involved.
   if (typeof sourceUrl === "string" && sourceUrl.startsWith("http")) {
     const outputPath = path.join(tmpDir, "clip.mp4");
+    const cutInput = localSourceOrUrl(sourceUrl);
     const ff = spawn("ffmpeg", [
       "-y",
       "-ss", String(s),
-      "-i", sourceUrl,
+      "-i", cutInput,
       "-t", String(e - s),
       "-c", "copy",
       "-avoid_negative_ts", "make_zero",
@@ -258,8 +372,17 @@ app.post("/clip", (req, res) => {
       if (code !== 0 || !fs.existsSync(outputPath)) {
         console.error("ffmpeg cut (sourceUrl) failed", code, ffStderr.slice(-2000));
         cleanup(tmpDir);
+        // Streaming a big file over the network is what usually fails here.
+        // Start caching it locally so the next try cuts from disk instead.
+        const willCache = cutInput === sourceUrl;
+        if (willCache) ensureCachedSource(sourceUrl).catch(() => {});
         if (!res.headersSent) {
-          res.status(502).json({ error: "DOWNLOAD_FAILED", message: "Não foi possível cortar o vídeo enviado." });
+          res.status(502).json({
+            error: "DOWNLOAD_FAILED",
+            message: willCache
+              ? "O servidor está preparando o vídeo (arquivo grande). Tente de novo em alguns minutos."
+              : "Não foi possível cortar o vídeo enviado.",
+          });
         }
         return;
       }
@@ -427,7 +550,10 @@ function detectInterruptions(utterances) {
 // Shared by the synchronous /transcribe endpoint and the async job worker.
 // Not bound by any Supabase Edge Function wall-clock limit — this runs
 // directly on the VM, so a 2-hour podcast is just as fine as a 5-minute one.
-function transcribeFromUrl(sourceUrl) {
+async function transcribeFromUrl(sourceUrl) {
+  // Pull the file to local disk first (kept for the clip cuts that follow);
+  // falls back to streaming from the URL if caching isn't possible.
+  const audioInput = (await ensureCachedSource(sourceUrl)) || sourceUrl;
   return new Promise((resolve, reject) => {
     const deepgramKey = process.env.DEEPGRAM_API_KEY;
     if (!deepgramKey) {
@@ -444,7 +570,7 @@ function transcribeFromUrl(sourceUrl) {
     // while to read over the network, and the worker loop isn't held to any
     // external wall-clock budget the way an Edge Function would be.
     const ff = spawn("ffmpeg", [
-      "-y", "-i", sourceUrl,
+      "-y", "-i", audioInput,
       "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k",
       audioPath,
     ]);

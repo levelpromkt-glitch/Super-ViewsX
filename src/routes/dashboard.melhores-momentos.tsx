@@ -183,6 +183,7 @@ function MelhoresMomentosPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const dragCounterRef = useRef(0);
+  const playerRef = useRef<HTMLElement>(null);
   const [pastedTranscript, setPastedTranscript] = useState("");
   const [storagePath, setStoragePath] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -485,6 +486,8 @@ function MelhoresMomentosPage() {
   // what actually makes "Assistir trecho" play only the cut, not the episode.
   const handleOpenMoment = async (m: ViralMoment) => {
     setActiveMoment(m);
+    // The player sits above the results grid, so bring it into view.
+    setTimeout(() => playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
     setClipPreviewUrl(null);
     setClipPreviewError(null);
     if (!clipSource) return;
@@ -685,7 +688,7 @@ function MelhoresMomentosPage() {
 
       {/* Inline player for the selected moment */}
       {activeMoment && (
-        <section className="tr-card tr-fade">
+        <section className="tr-card tr-fade" ref={playerRef}>
           <div className="tr-card-head">
             <Sparkles size={18} className="tr-icon-lime" />
             <h2>{getEffectiveTitle(activeMoment)}</h2>
