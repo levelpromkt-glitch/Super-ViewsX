@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertCircle, Calendar, Film, Play, Plus, X } from "lucide-react";
 import type { ConnectedAccount } from "@/services/socialAccountsService";
+import { PlatformLogo } from "@/components/social/PlatformLogo";
 import { formatDuration, type PostDraft } from "./postDraft";
 
 export const PLATFORM_SHORT: Record<string, string> = {
@@ -86,7 +87,8 @@ export function PostCard({
                 onClick={() => toggleAccount(id)}
                 title="Remover esta conta"
               >
-                {accountName(acc)} · {PLATFORM_SHORT[acc.platform] ?? acc.platform} <X size={10} />
+                <PlatformLogo platform={acc.platform} size={16} />
+                {accountName(acc)} <X size={10} />
               </button>
             );
           })}
@@ -99,7 +101,8 @@ export function PostCard({
             {accounts.map((a) => (
               <label key={a.id} className="pb-picker-row">
                 <input type="checkbox" checked={draft.accountIds.includes(a.id)} onChange={() => toggleAccount(a.id)} />
-                {accountName(a)} <span className="pb-muted">({PLATFORM_SHORT[a.platform] ?? a.platform})</span>
+                <PlatformLogo platform={a.platform} size={20} />
+                {accountName(a)}
               </label>
             ))}
           </div>

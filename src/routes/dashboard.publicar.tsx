@@ -20,6 +20,7 @@ export const Route = createFileRoute("/dashboard/publicar")({
 import { PostsService, PostsError, ScheduledPost, MAX_UPLOAD_BYTES } from "@/services/postsService";
 import { SocialAccountsService, ConnectedAccount } from "@/services/socialAccountsService";
 import { PostCard, PLATFORM_SHORT, accountName } from "@/components/publish/PostCard";
+import { PlatformLogo } from "@/components/social/PlatformLogo";
 import {
   distributeDates,
   readVideoInfo,
@@ -375,7 +376,9 @@ function PublicarPage() {
                     if (group.length === 0) return null;
                     return (
                       <div key={platform} className="pb-acc-group">
-                        <span className="pb-acc-platform">{PLATFORM_SHORT[platform]}</span>
+                        <span className="pb-acc-platform">
+                          <PlatformLogo platform={platform} size={18} /> {PLATFORM_SHORT[platform]}
+                        </span>
                         {group.map((a) => (
                           <label key={a.id} className="pb-acc-row">
                             <input
@@ -383,6 +386,7 @@ function PublicarPage() {
                               checked={defaultAccountIds.includes(a.id)}
                               onChange={() => toggleDefaultAccount(a.id)}
                             />
+                            <PlatformLogo platform={a.platform} size={22} />
                             {accountName(a)}
                           </label>
                         ))}
@@ -515,6 +519,7 @@ function PublicarPage() {
                   const acc = accounts?.find((a) => a.id === p.account_id);
                   return (
                     <div key={p.id} className="pb-history-row">
+                      <PlatformLogo platform={p.platform} size={34} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="pb-history-caption">{p.caption || "(sem legenda)"}</div>
                         <div className="pb-history-meta">
