@@ -47,7 +47,7 @@ export type PlatformSettings = {
 };
 
 export const defaultSettings = (): PlatformSettings => ({
-  youtube: { title: null, description: null, privacy: "public", madeForKids: false, aiContent: false },
+  youtube: { title: null, description: null, privacy: PLATFORM_AUDITED.youtube ? "public" : "private", madeForKids: false, aiContent: false },
   tiktok: { caption: null, privacy: null, allowComment: true, allowDuet: true, allowStitch: true, aiContent: false },
   instagram: { caption: null, aiContent: false, userTags: [] },
 });
@@ -105,14 +105,18 @@ export function resolveYoutube(base: string, s: PlatformSettings["youtube"]): Yo
   return {
     title: s.title ?? defaultYoutubeTitle(base),
     description: s.description ?? base,
-    privacy: s.privacy,
+    privacy: PLATFORM_AUDITED.youtube ? s.privacy : "private",
     madeForKids: s.madeForKids,
     aiContent: s.aiContent,
   };
 }
 
 export function resolveTikTok(base: string, s: PlatformSettings["tiktok"], privacyOptions: string[]): TikTokOptions {
-  const privacy = s.privacy && privacyOptions.includes(s.privacy) ? s.privacy : privacyOptions[0] || "SELF_ONLY";
+  const privacy = !PLATFORM_AUDITED.tiktok
+    ? "SELF_ONLY"
+    : s.privacy && privacyOptions.includes(s.privacy)
+      ? s.privacy
+      : privacyOptions[0] || "SELF_ONLY";
   return {
     caption: s.caption ?? base,
     privacy,

@@ -224,9 +224,14 @@ serve(async (req) => {
     const createData = await createResponse.json().catch(() => null);
     if (!createResponse.ok || !createData?.id) {
       console.error('Instagram media create failed', createResponse.status, createData);
-      await markResult('failed', { error_message: createData?.error?.message || 'O Instagram recusou o vídeo.' });
+      const createMessage: string = createData?.error?.message
+        ? createData.error.code === 200 && /blocked/i.test(createData.error.message)
+          ? `${createData.error.message} O Meta bloqueou o acesso da API a esta conta. Confira se ela é Profissional (Business/Criador) e testadora do app, e tente publicar sem marcação.`
+          : createData.error.message
+        : 'O Instagram recusou o vídeo.';
+      await markResult('failed', { error_message: createMessage });
       return new Response(
-        JSON.stringify({ success: false, code: 'CONTAINER_FAILED', message: createData?.error?.message || 'O Instagram recusou o vídeo.' }),
+        JSON.stringify({ success: false, code: 'CONTAINER_FAILED', message: createMessage }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

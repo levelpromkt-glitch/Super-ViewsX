@@ -149,6 +149,15 @@ serve(async (req) => {
         }).eq('id', account.id);
       } else {
         console.error('YouTube token refresh failed', refreshData);
+        if (refreshData?.error === 'invalid_grant') {
+          // Google drops refresh tokens after 7 days while the OAuth app is in Testing status.
+          const message = 'A conexão com o YouTube expirou. Reconecte o canal em Configurações > Contas conectadas.';
+          await markResult('failed', { error_message: message });
+          return new Response(
+            JSON.stringify({ success: false, code: 'RECONNECT_REQUIRED', message }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
 

@@ -183,9 +183,13 @@ serve(async (req) => {
     const initData = await initResponse.json();
     if (!initResponse.ok || initData.error?.code !== 'ok') {
       console.error('TikTok publish init error', initResponse.status, initData);
-      await markResult('failed', { error_message: initData?.error?.message || 'O TikTok recusou o início da publicação.' });
+      const initMessage: string =
+        initData?.error?.code === 'unaudited_client_can_only_post_to_private_accounts'
+          ? 'O TikTok só permite publicar em contas privadas enquanto o app não for auditado. Deixe a conta do TikTok como privada (Configurações > Privacidade) ou aguarde a auditoria.'
+          : initData?.error?.message || 'O TikTok recusou o início da publicação.';
+      await markResult('failed', { error_message: initMessage });
       return new Response(
-        JSON.stringify({ success: false, code: 'TIKTOK_INIT_FAILED', message: initData?.error?.message || 'O TikTok recusou o início da publicação.' }),
+        JSON.stringify({ success: false, code: 'TIKTOK_INIT_FAILED', message: initMessage }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

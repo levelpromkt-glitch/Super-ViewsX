@@ -137,7 +137,10 @@ serve(async (req) => {
         });
         const createData = await createResponse.json().catch(() => null);
         if (!createResponse.ok || !createData?.id) {
-          throw new Error(createData?.error?.message || 'O Instagram recusou o vídeo.');
+          const igMessage: string = createData?.error?.message || 'O Instagram recusou o vídeo.';
+          throw new Error(
+            createData?.error?.code === 200 && /blocked/i.test(igMessage) ? `${igMessage} O Meta bloqueou o acesso da API a esta conta. Confira se ela é Profissional (Business/Criador) e testadora do app, e tente publicar sem marcação.` : igMessage
+          );
         }
         const containerId: string = createData.id;
 
@@ -253,7 +256,11 @@ serve(async (req) => {
         });
         const initData = await initResponse.json();
         if (!initResponse.ok || initData.error?.code !== 'ok') {
-          throw new Error(initData?.error?.message || 'O TikTok recusou o início da publicação.');
+          throw new Error(
+            initData?.error?.code === 'unaudited_client_can_only_post_to_private_accounts'
+              ? 'O TikTok só permite publicar em contas privadas enquanto o app não for auditado. Deixe a conta do TikTok como privada (Configurações > Privacidade) ou aguarde a auditoria.'
+              : initData?.error?.message || 'O TikTok recusou o início da publicação.'
+          );
         }
 
         const uploadUrl: string = initData.data.upload_url;
@@ -292,6 +299,8 @@ serve(async (req) => {
               token_expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
               updated_at: new Date().toISOString(),
             }).eq('id', account.id);
+          } else if (refreshData?.error === 'invalid_grant') {
+            throw new Error('A conexão com o YouTube expirou. Reconecte o canal em Configurações > Contas conectadas.');
           }
         }
 

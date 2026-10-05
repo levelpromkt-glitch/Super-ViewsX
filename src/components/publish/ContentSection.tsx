@@ -250,8 +250,8 @@ export function ContentSection({
             </div>
             <select
               className="pb-input"
-              value={settings.youtube.privacy}
-              disabled={disabled}
+              value={yt.privacy}
+              disabled={disabled || !PLATFORM_AUDITED.youtube}
               onChange={(e) => setYt({ privacy: e.target.value as YoutubePrivacy })}
             >
               {(Object.keys(YOUTUBE_PRIVACY_LABELS) as YoutubePrivacy[]).map((k) => (
@@ -301,7 +301,7 @@ export function ContentSection({
               <select
                 className="pb-input"
                 value={tt.privacy}
-                disabled={disabled}
+                disabled={disabled || !PLATFORM_AUDITED.tiktok}
                 onChange={(e) => setTt({ privacy: e.target.value })}
               >
                 {(tiktok.privacyOptions.length > 0 ? tiktok.privacyOptions : ["SELF_ONLY"]).map((k) => (
