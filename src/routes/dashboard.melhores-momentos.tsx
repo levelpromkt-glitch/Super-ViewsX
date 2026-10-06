@@ -196,7 +196,7 @@ function MelhoresMomentosPage() {
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
   // Kept after a successful analysis so the moments can be re-run (another
   // length, or a fresh attempt) without uploading/transcribing again.
-  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[] } | null>(null);
+  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[]; wordTimes?: [number, number][] } | null>(null);
   const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
   const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
   const [clipPreviewError, setClipPreviewError] = useState<string | null>(null);
@@ -251,6 +251,31 @@ function MelhoresMomentosPage() {
 
   const currentDurationLabel = DURATIONS.find((d) => d.id === duration)?.label ?? "";
 
+  // Two passes: a wide first pass over the whole transcript, then a stricter
+  // judge that keeps only the genuinely strong cuts and fixes their boundaries.
+  // If the judge itself fails, the first-pass list is still better than nothing.
+  const runMomentSearch = async (
+    key: string,
+    lines: TranscriptLine[],
+    audioSignals: AudioSignal[] | undefined,
+    wordTimes: [number, number][] | undefined,
+    refresh: boolean
+  ): Promise<{ moments: ViralMoment[]; videoTopic?: string }> => {
+    setLoadingStatus("Analisando os melhores momentos com IA...");
+    const first = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals, refresh, wordTimes);
+    const withoutSlices = (list: ViralMoment[]) => list.map(({ slice: _slice, ...rest }) => rest as ViralMoment);
+    if (first.moments.length === 0) return { moments: [], videoTopic: first.videoTopic };
+
+    setLoadingStatus("Refinando os cortes com uma segunda IA (só os mais virais passam)...");
+    try {
+      const judged = await ViralMomentsService.judgeMoments(key, duration, first.videoTopic, first.moments, refresh);
+      return { moments: withoutSlices(judged), videoTopic: first.videoTopic };
+    } catch (error) {
+      console.error("Segunda passada falhou, mantendo a primeira", error);
+      return { moments: withoutSlices(first.moments), videoTopic: first.videoTopic };
+    }
+  };
+
   const handleAnalyzeYoutube = async () => {
     const id = extractYouTubeId(url);
     if (!url.trim()) {
@@ -280,8 +305,8 @@ function MelhoresMomentosPage() {
     try {
       const transcript = await TranscriptService.getTranscript(id);
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration);
-      setAnalysis({ key: id, lines: transcript.lines, audioSignals: undefined });
+      setAnalysis({ key: id, lines: transcript.lines });
+      const result = await runMomentSearch(id, transcript.lines, undefined, undefined, false);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
@@ -332,6 +357,7 @@ function MelhoresMomentosPage() {
       const manualLines = parsePastedTranscript(pastedTranscript);
       let lines: TranscriptLine[];
       let audioSignals: AudioSignal[] | undefined;
+      let wordTimes: [number, number][] | undefined;
       if (manualLines.length > 0) {
         lines = manualLines;
       } else {
@@ -347,11 +373,11 @@ function MelhoresMomentosPage() {
         });
         lines = transcript.lines;
         audioSignals = transcript.audioSignals;
+        wordTimes = transcript.wordTimes;
       }
 
-      setLoadingStatus("Analisando os melhores momentos com IA...");
-      const result = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals);
-      setAnalysis({ key, lines, audioSignals });
+      setAnalysis({ key, lines, audioSignals, wordTimes });
+      const result = await runMomentSearch(key, lines, audioSignals, wordTimes, false);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
 
@@ -387,9 +413,8 @@ function MelhoresMomentosPage() {
     setSelectedTitle({});
     setUseHook({});
     setLoading(true);
-    setLoadingStatus("Analisando os melhores momentos com IA...");
     try {
-      const result = await ViralMomentsService.findBestMoments(analysis.key, "", analysis.lines, duration, analysis.audioSignals, true);
+      const result = await runMomentSearch(analysis.key, analysis.lines, analysis.audioSignals, analysis.wordTimes, true);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
       if (sourceMode === "upload" && uploadFile) {

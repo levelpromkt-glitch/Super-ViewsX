@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_MODEL = "claude-sonnet-5";
-const MAX_LINES = 1200; // safety cap on transcript size sent to the model
+const MAX_SENTENCES = 6000; // safety cap on transcript size sent to the model
+const SLICE_CONTEXT_SEC = 25; // transcript context kept around each candidate for the judge pass
 const CACHE_TTL_HOURS = 24;
 
 // Allowed clip-duration presets (seconds). Anything else falls back to DEFAULT_DURATION.
@@ -22,6 +23,7 @@ const DEFAULT_DURATION: [number, number] = [10, 90];
 const MIN_CLIP_SECONDS = 10;
 
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
+type Sentence = { start: number; end: number; text: string };
 type AudioSignal = { time: number; type: "energy_peak" | "interruption"; detail?: string };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -128,15 +130,65 @@ const setCache = async (cacheSeed: string, videoId: string, response: unknown) =
   }
 };
 
+// The VM's transcript "lines" are whole speaker utterances (some run 60s), far
+// too coarse to cut on: a boundary snapped to a line edge lands mid-thought or
+// drags in a whole extra paragraph. When word timestamps are available, split
+// each line into sentences and time them from the words; otherwise the lines
+// themselves are the finest unit we have.
+const SENTENCE_SPLIT = /(?<=[.!?])\s+(?=[A-Z\u00C0-\u00DC0-9"\u201C\u00BF\u00A1])/;
+
+const countWords = (t: string) => t.split(/\s+/).filter(Boolean).length;
+
+const buildSentences = (lines: TranscriptLine[], wordTimes?: [number, number][]): Sentence[] => {
+  const byLine = (): Sentence[] => lines.map((l) => ({ start: l.start, end: l.start + l.duration, text: l.text }));
+  if (!wordTimes || wordTimes.length === 0) return byLine();
+
+  const out: Sentence[] = [];
+  let wi = 0;
+  for (const l of lines) {
+    const lineEnd = l.start + l.duration;
+    while (wi < wordTimes.length && wordTimes[wi][0] < l.start - 0.1) wi++;
+    let wj = wi;
+    while (wj < wordTimes.length && wordTimes[wj][1] <= lineEnd + 0.1) wj++;
+    const lineWords = wordTimes.slice(wi, wj);
+    wi = wj;
+
+    const rawParts = l.text.split(SENTENCE_SPLIT).map((p) => p.trim()).filter(Boolean);
+    // Glue tiny fragments ("Sim.", "Uhum.") onto the previous sentence.
+    const parts: string[] = [];
+    for (const p of rawParts) {
+      if (parts.length > 0 && countWords(p) < 3) parts[parts.length - 1] += ' ' + p;
+      else parts.push(p);
+    }
+
+    if (lineWords.length === 0 || parts.length <= 1) {
+      out.push({ start: l.start, end: lineEnd, text: l.text });
+      continue;
+    }
+
+    const counts = parts.map(countWords);
+    const total = counts.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    for (let k = 0; k < parts.length; k++) {
+      const from = Math.min(lineWords.length - 1, Math.round((acc / total) * lineWords.length));
+      acc += counts[k];
+      const to = Math.max(from + 1, Math.min(lineWords.length, Math.round((acc / total) * lineWords.length)));
+      const ws = lineWords.slice(from, to);
+      out.push({ start: ws[0][0], end: ws[ws.length - 1][1], text: parts[k] });
+    }
+  }
+  return out;
+};
+
 const buildPrompt = (
   title: string,
-  lines: TranscriptLine[],
+  sentences: Sentence[],
   duration: [number, number],
   audioSignals?: AudioSignal[]
 ) => {
-  const transcriptText = lines
-    .slice(0, MAX_LINES)
-    .map((l) => `[${Math.floor(Number.isFinite(l.start) ? l.start : l.seconds || 0)}] ${l.text}`)
+  const transcriptText = sentences
+    .slice(0, MAX_SENTENCES)
+    .map((s) => `[${Math.floor(s.start)}] ${s.text}`)
     .join("\n");
 
   const [minSec, maxSec] = duration;
@@ -235,8 +287,10 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 ## Regras finais
 
 - Duração de cada trecho aprovado ENTRE ${minSec} E ${maxSec} SEGUNDOS (nunca abaixo de ${MIN_CLIP_SECONDS}s — é a minutagem mínima aceita nas competições de clipagem que esses cortes vão disputar). Ajuste o corte (contexto antes/depois, ou aparar excesso) pra caber na faixa sem perder o sentido, mas nunca inclua um trecho que só cabe na faixa cortando o desenvolvimento ou o payoff.
+- ABERTURA = O HOOK: o corte tem que COMEÇAR na frase que prende (a afirmação forte, o número, a pergunta que o trecho responde, a virada). Nunca abra com muleta ("então", "né", "cara"), com uma frase pela metade, com o entrevistador apresentando/emendando assunto, nem com contexto que só faz sentido depois. Se o hook está na 3ª frase do trecho, comece na 3ª frase.
+- FECHO = O PAYOFF: termine na última frase que fecha a ideia (a resposta, a regra, a punchline, a conclusão). Pare ali — nunca inclua a pergunta seguinte do entrevistador, agradecimento, "então...", nem frase cortada. Termine em ponto final.
 - Não corte no meio de uma frase ou ideia.
-- MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15. Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
+- MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15 (até 40 candidatos; uma 2ª etapa vai julgar e filtrar os melhores, então prefira incluir um candidato forte a descartá-lo por dúvida). Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
 - A única razão válida para descartar um candidato é ele genuinamente falhar no teste Hook/Desenvolvimento/Payoff, em um dos dois portões, ou em algum dos reprovadores automáticos acima — nunca descarte um trecho aprovado só porque já existem outros na lista.
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
 - "start" e "end" são em SEGUNDOS (inteiros). O número entre colchetes no início de cada linha da transcrição JÁ É o segundo exato em que a linha começa no vídeo (ex.: [3786] é 63 min e 6 s). Copie esses números direto em "start" e "end" — NUNCA converta para minutos:segundos nem junte dígitos. Nenhum valor pode passar do último número da transcrição. "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
@@ -262,6 +316,7 @@ serve(async (req) => {
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
     const refresh: boolean = body?.refresh === true;
+    const wordTimes: [number, number][] | undefined = Array.isArray(body?.wordTimes) ? body.wordTimes : undefined;
 
     if (!videoId || typeof videoId !== 'string') {
       return new Response(
@@ -276,7 +331,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v13-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v14-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = refresh ? null : await getCache(cacheSeed);
     if (cached) {
@@ -295,7 +350,9 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    const prompt = buildPrompt(title, lines, duration, audioSignals);
+    const sentences = buildSentences(lines, wordTimes);
+    const prompt = buildPrompt(title, sentences, duration, audioSignals);
+    console.log('SENTENCES', sentences.length, 'lines', lines.length, 'wordTimes', wordTimes ? wordTimes.length : 0);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -366,7 +423,7 @@ serve(async (req) => {
       );
     }
 
-    const videoDurationSec = lines.length > 0 ? lines[lines.length - 1].start + lines[lines.length - 1].duration : Infinity;
+    const videoDurationSec = sentences.length > 0 ? sentences[sentences.length - 1].end : Infinity;
     console.log('RAW moments', momentsList.length, 'videoDurationSec', videoDurationSec, 'preset', duration.join('-'), JSON.stringify(momentsList.map((m: any) => [m.start, m.end, m.score])));
 
     const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
@@ -378,14 +435,13 @@ serve(async (req) => {
     // falls inside (using that line's exact, sub-second start/duration) fixes
     // the clip to begin and end on an actual spoken-line boundary instead of
     // the model's rounded guess.
-    const findLine = (t: number): TranscriptLine | undefined => {
-      let best: TranscriptLine | undefined;
-      for (const l of lines) {
-        const lineEnd = l.start + l.duration;
-        if (t >= l.start && t <= lineEnd) return l;
-        if (!best || Math.abs(l.start - t) < Math.abs(best.start - t)) best = l;
+    const findLine = (t: number): { start: number; duration: number } | undefined => {
+      let best: Sentence | undefined;
+      for (const sn of sentences) {
+        if (t >= sn.start && t <= sn.end) return { start: sn.start, duration: sn.end - sn.start };
+        if (!best || Math.abs(sn.start - t) < Math.abs(best.start - t)) best = sn;
       }
-      return best;
+      return best ? { start: best.start, duration: best.end - best.start } : undefined;
     };
 
     // A moment whose times fall outside the video is a model slip (e.g. digits
@@ -438,12 +494,16 @@ serve(async (req) => {
           hookStart,
           hookReason: hookStart !== undefined ? String(m.hookReason || '').slice(0, 300) : undefined,
           score: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
+          // Sentences around the cut ("start|end|text"), used by the second (judge) pass.
+          slice: sentences
+            .filter((sn) => sn.end >= start - SLICE_CONTEXT_SEC && sn.start <= end + SLICE_CONTEXT_SEC)
+            .map((sn) => `${(Math.round(sn.start * 10) / 10).toFixed(1)}|${(Math.round(sn.end * 10) / 10).toFixed(1)}|${sn.text}`),
         };
       })
       // AI-reported timestamps can exceed the transcript's real length; drop
       // anything that becomes invalid (or falls under the competition's
       // minimum clip length) after clamping.
-      .filter((m) => m.end - m.start >= MIN_CLIP_SECONDS)
+      .filter((m) => m.end - m.start >= MIN_CLIP_SECONDS && m.end - m.start <= maxMomentSec + 15)
       .sort((a, b) => b.score - a.score);
 
     console.log('FINAL moments', moments.length);

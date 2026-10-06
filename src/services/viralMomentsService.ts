@@ -17,6 +17,8 @@ export type ViralMoment = {
   hookStart?: number;
   hookReason?: string;
   score: number;
+  // First-pass transcript context ("start|end|text"), only used to feed the judge pass.
+  slice?: string[];
 };
 
 export class ViralMomentsError extends Error {
@@ -41,6 +43,8 @@ export type TranscribeUploadResult = {
   lines: TranscriptLine[];
   videoDurationSec: number;
   audioSignals?: AudioSignal[];
+  // [start, end] of every spoken word — lets the server cut on sentence boundaries.
+  wordTimes?: [number, number][];
 };
 
 export const ViralMomentsService = {
@@ -122,7 +126,11 @@ export const ViralMomentsService = {
 
       if (data.status === "completed") {
         const result = data.result as TranscribeUploadResult;
-        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0, audioSignals: result.audioSignals };
+        const rawWords = (result as unknown as { words?: { start: number; end: number }[] }).words;
+        const wordTimes = Array.isArray(rawWords)
+          ? rawWords.map((w) => [Math.round(w.start * 100) / 100, Math.round(w.end * 100) / 100] as [number, number])
+          : undefined;
+        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0, audioSignals: result.audioSignals, wordTimes };
       }
       if (data.status === "failed") {
         throw new ViralMomentsError(data.error_message || "Falha ao transcrever o vídeo.", "JOB_FAILED");
@@ -141,10 +149,11 @@ export const ViralMomentsService = {
     lines: TranscriptLine[],
     duration: DurationPreset,
     audioSignals?: AudioSignal[],
-    refresh = false
+    refresh = false,
+    wordTimes?: [number, number][]
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, audioSignals, refresh },
+      body: { videoId, title, lines, duration, audioSignals, refresh, wordTimes },
     });
 
     if (error) {
@@ -155,5 +164,44 @@ export const ViralMomentsService = {
       throw new ViralMomentsError(data?.message || "Erro ao analisar o vídeo.", data?.code || "UNKNOWN_ERROR");
     }
     return { moments: data.moments as ViralMoment[], videoTopic: data.meta?.videoTopic };
+  },
+
+  // Second pass: a stricter model re-reads each candidate's exact text, drops the
+  // weak ones, moves the cut to open on the hook / close on the payoff and
+  // rewrites the headlines from what is really said inside the cut.
+  async judgeMoments(
+    videoId: string,
+    duration: DurationPreset,
+    videoTopic: string | undefined,
+    candidates: ViralMoment[],
+    refresh = false
+  ): Promise<ViralMoment[]> {
+    const { data, error } = await supabase.functions.invoke("viral-judge", {
+      body: {
+        videoId,
+        duration,
+        videoTopic,
+        refresh,
+        candidates: candidates.map((c) => ({
+          id: c.id,
+          start: c.start,
+          end: c.end,
+          title: c.title,
+          titles: c.titles,
+          profile: c.profile,
+          reason: c.reason,
+          score: c.score,
+          slice: c.slice,
+        })),
+      },
+    });
+    if (error) {
+      const message = await readEdgeFunctionErrorMessage(error, "Erro ao refinar os cortes.");
+      throw new ViralMomentsError(message, "FUNCTION_ERROR");
+    }
+    if (!data?.success) {
+      throw new ViralMomentsError(data?.message || "Erro ao refinar os cortes.", data?.code || "UNKNOWN_ERROR");
+    }
+    return data.moments as ViralMoment[];
   },
 };
