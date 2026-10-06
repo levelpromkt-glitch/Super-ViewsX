@@ -139,7 +139,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .auth-error { color: #ef4444; font-size: .85rem; min-height: 24px; }
 
 .dashboard-container { display: flex; min-height: 100vh; background: var(--bg-main); position: relative; z-index: 2; }
-.sidebar { width: 250px; background: transparent; padding: 24px 14px 18px; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; transition: width var(--transition), transform var(--transition); overflow-y: auto; overflow-x: hidden; }
+.sidebar { width: 250px; background: transparent; padding: 24px 14px 18px; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; transition: width var(--transition), transform var(--transition); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.sidebar::-webkit-scrollbar { display: none; }
 @media (min-width: 769px) {
   .sidebar.collapsed { width: 84px; }
   .sidebar.collapsed .nav-item { justify-content: center; width: 44px; height: 44px; padding: 0; margin: 0 auto 10px auto; border-radius: 50%; }
