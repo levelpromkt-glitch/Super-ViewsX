@@ -196,7 +196,7 @@ function MelhoresMomentosPage() {
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
   // Kept after a successful analysis so the moments can be re-run (another
   // length, or a fresh attempt) without uploading/transcribing again.
-  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[]; wordTimes?: [number, number][] } | null>(null);
+  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[]; words?: [string, number, number][] } | null>(null);
   const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
   const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
   const [clipPreviewError, setClipPreviewError] = useState<string | null>(null);
@@ -258,11 +258,11 @@ function MelhoresMomentosPage() {
     key: string,
     lines: TranscriptLine[],
     audioSignals: AudioSignal[] | undefined,
-    wordTimes: [number, number][] | undefined,
+    words: [string, number, number][] | undefined,
     refresh: boolean
   ): Promise<{ moments: ViralMoment[]; videoTopic?: string }> => {
     setLoadingStatus("Analisando os melhores momentos com IA...");
-    const first = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals, refresh, wordTimes);
+    const first = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals, refresh, words);
     const withoutSlices = (list: ViralMoment[]) => list.map(({ slice: _slice, ...rest }) => rest as ViralMoment);
     if (first.moments.length === 0) return { moments: [], videoTopic: first.videoTopic };
 
@@ -357,7 +357,7 @@ function MelhoresMomentosPage() {
       const manualLines = parsePastedTranscript(pastedTranscript);
       let lines: TranscriptLine[];
       let audioSignals: AudioSignal[] | undefined;
-      let wordTimes: [number, number][] | undefined;
+      let words: [string, number, number][] | undefined;
       if (manualLines.length > 0) {
         lines = manualLines;
       } else {
@@ -373,11 +373,11 @@ function MelhoresMomentosPage() {
         });
         lines = transcript.lines;
         audioSignals = transcript.audioSignals;
-        wordTimes = transcript.wordTimes;
+        words = transcript.words;
       }
 
-      setAnalysis({ key, lines, audioSignals, wordTimes });
-      const result = await runMomentSearch(key, lines, audioSignals, wordTimes, false);
+      setAnalysis({ key, lines, audioSignals, words });
+      const result = await runMomentSearch(key, lines, audioSignals, words, false);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
 
@@ -414,7 +414,7 @@ function MelhoresMomentosPage() {
     setUseHook({});
     setLoading(true);
     try {
-      const result = await runMomentSearch(analysis.key, analysis.lines, analysis.audioSignals, analysis.wordTimes, true);
+      const result = await runMomentSearch(analysis.key, analysis.lines, analysis.audioSignals, analysis.words, true);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
       if (sourceMode === "upload" && uploadFile) {

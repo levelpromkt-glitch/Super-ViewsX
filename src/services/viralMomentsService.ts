@@ -43,8 +43,8 @@ export type TranscribeUploadResult = {
   lines: TranscriptLine[];
   videoDurationSec: number;
   audioSignals?: AudioSignal[];
-  // [start, end] of every spoken word — lets the server cut on sentence boundaries.
-  wordTimes?: [number, number][];
+  // [word, start, end] of every spoken word — lets the server cut on sentence boundaries.
+  words?: [string, number, number][];
 };
 
 export const ViralMomentsService = {
@@ -126,11 +126,11 @@ export const ViralMomentsService = {
 
       if (data.status === "completed") {
         const result = data.result as TranscribeUploadResult;
-        const rawWords = (result as unknown as { words?: { start: number; end: number }[] }).words;
-        const wordTimes = Array.isArray(rawWords)
-          ? rawWords.map((w) => [Math.round(w.start * 100) / 100, Math.round(w.end * 100) / 100] as [number, number])
+        const rawWords = (result as unknown as { words?: { word: string; start: number; end: number }[] }).words;
+        const words = Array.isArray(rawWords)
+          ? rawWords.map((w) => [String(w.word), Math.round(w.start * 100) / 100, Math.round(w.end * 100) / 100] as [string, number, number])
           : undefined;
-        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0, audioSignals: result.audioSignals, wordTimes };
+        return { lines: result.lines, videoDurationSec: result.videoDurationSec || 0, audioSignals: result.audioSignals, words };
       }
       if (data.status === "failed") {
         throw new ViralMomentsError(data.error_message || "Falha ao transcrever o vídeo.", "JOB_FAILED");
@@ -150,10 +150,10 @@ export const ViralMomentsService = {
     duration: DurationPreset,
     audioSignals?: AudioSignal[],
     refresh = false,
-    wordTimes?: [number, number][]
+    words?: [string, number, number][]
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, audioSignals, refresh, wordTimes },
+      body: { videoId, title, lines, duration, audioSignals, refresh, words },
     });
 
     if (error) {

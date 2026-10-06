@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildSentences, type Sentence, type WordTiming } from "./sentences.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +24,6 @@ const DEFAULT_DURATION: [number, number] = [10, 90];
 const MIN_CLIP_SECONDS = 10;
 
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
-type Sentence = { start: number; end: number; text: string };
 type AudioSignal = { time: number; type: "energy_peak" | "interruption"; detail?: string };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -128,56 +128,6 @@ const setCache = async (cacheSeed: string, videoId: string, response: unknown) =
   } catch (e) {
     console.error('viral-moments cache set error', e);
   }
-};
-
-// The VM's transcript "lines" are whole speaker utterances (some run 60s), far
-// too coarse to cut on: a boundary snapped to a line edge lands mid-thought or
-// drags in a whole extra paragraph. When word timestamps are available, split
-// each line into sentences and time them from the words; otherwise the lines
-// themselves are the finest unit we have.
-const SENTENCE_SPLIT = /(?<=[.!?])\s+(?=[A-Z\u00C0-\u00DC0-9"\u201C\u00BF\u00A1])/;
-
-const countWords = (t: string) => t.split(/\s+/).filter(Boolean).length;
-
-const buildSentences = (lines: TranscriptLine[], wordTimes?: [number, number][]): Sentence[] => {
-  const byLine = (): Sentence[] => lines.map((l) => ({ start: l.start, end: l.start + l.duration, text: l.text }));
-  if (!wordTimes || wordTimes.length === 0) return byLine();
-
-  const out: Sentence[] = [];
-  let wi = 0;
-  for (const l of lines) {
-    const lineEnd = l.start + l.duration;
-    while (wi < wordTimes.length && wordTimes[wi][0] < l.start - 0.1) wi++;
-    let wj = wi;
-    while (wj < wordTimes.length && wordTimes[wj][1] <= lineEnd + 0.1) wj++;
-    const lineWords = wordTimes.slice(wi, wj);
-    wi = wj;
-
-    const rawParts = l.text.split(SENTENCE_SPLIT).map((p) => p.trim()).filter(Boolean);
-    // Glue tiny fragments ("Sim.", "Uhum.") onto the previous sentence.
-    const parts: string[] = [];
-    for (const p of rawParts) {
-      if (parts.length > 0 && countWords(p) < 3) parts[parts.length - 1] += ' ' + p;
-      else parts.push(p);
-    }
-
-    if (lineWords.length === 0 || parts.length <= 1) {
-      out.push({ start: l.start, end: lineEnd, text: l.text });
-      continue;
-    }
-
-    const counts = parts.map(countWords);
-    const total = counts.reduce((a, b) => a + b, 0) || 1;
-    let acc = 0;
-    for (let k = 0; k < parts.length; k++) {
-      const from = Math.min(lineWords.length - 1, Math.round((acc / total) * lineWords.length));
-      acc += counts[k];
-      const to = Math.max(from + 1, Math.min(lineWords.length, Math.round((acc / total) * lineWords.length)));
-      const ws = lineWords.slice(from, to);
-      out.push({ start: ws[0][0], end: ws[ws.length - 1][1], text: parts[k] });
-    }
-  }
-  return out;
 };
 
 const buildPrompt = (
@@ -316,7 +266,7 @@ serve(async (req) => {
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
     const refresh: boolean = body?.refresh === true;
-    const wordTimes: [number, number][] | undefined = Array.isArray(body?.wordTimes) ? body.wordTimes : undefined;
+    const words: WordTiming[] | undefined = Array.isArray(body?.words) ? body.words : undefined;
 
     if (!videoId || typeof videoId !== 'string') {
       return new Response(
@@ -331,7 +281,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v14-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v15-${videoId}-${duration[0]}-${duration[1]}`;
 
     const cached = refresh ? null : await getCache(cacheSeed);
     if (cached) {
@@ -350,9 +300,9 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
-    const sentences = buildSentences(lines, wordTimes);
+    const sentences = buildSentences(lines, words);
     const prompt = buildPrompt(title, sentences, duration, audioSignals);
-    console.log('SENTENCES', sentences.length, 'lines', lines.length, 'wordTimes', wordTimes ? wordTimes.length : 0);
+    console.log('SENTENCES', sentences.length, 'lines', lines.length, 'words', words ? words.length : 0);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

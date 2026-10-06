@@ -117,8 +117,8 @@ REPROVE se for: conselho genérico e previsível; opinião sem razão; conversa 
 ## 2. Corte exato (start e end) — o que mais pesa na qualidade
 Escolha os rótulos de início e fim DENTRO da transcrição do candidato (pode ir além da proposta inicial, ou aparar):
 - start = rótulo da PRIMEIRA frase do corte, e ela tem que ser o HOOK. Corte fora qualquer frase de introdução, muleta ("então", "né", "cara"), frase pela metade, pergunta de transição do entrevistador (a menos que a própria pergunta seja o hook) ou contexto que só faz sentido depois.
-- end = rótulo da ÚLTIMA frase do corte (ela entra inteira): a frase que fecha a ideia. Pare no payoff. NUNCA inclua a pergunta seguinte do entrevistador, agradecimento, "então...", nem frase que ficou no meio.
-- A duração (do início da primeira frase ao fim da última) tem que ficar entre ${minSec}s e ${maxSec}s. Se a melhor versão do trecho for maior que o limite, escolha o recorte mais forte dentro do limite que ainda feche a ideia; se não der para fechar a ideia dentro do limite, reprove.
+- end = rótulo da ÚLTIMA frase do corte (ela entra inteira): a frase que fecha a ideia, dita por quem está contando. Pare no payoff. NUNCA termine numa pergunta dirigida ao outro participante ("faz sentido?", "como foi isso?"), nem inclua a pergunta seguinte do entrevistador, agradecimento, "então...", nem frase que ficou no meio ou cortada.
+- A duração (do início da primeira frase ao fim da última) tem que ficar entre ${minSec}s e ${maxSec}s — é um limite RÍGIDO (cortes acima disso são descartados automaticamente). Se a melhor versão do trecho for maior que o limite, escolha o recorte mais forte dentro do limite que ainda feche a ideia; se não der para fechar a ideia dentro do limite, reprove.
 - Copie os rótulos exatamente como aparecem.
 
 ## 3. score (0 a 100) — potencial viral REAL
@@ -148,7 +148,7 @@ const callJudge = async (apiKey: string, model: string, prompt: string) => {
       body: JSON.stringify({
         model,
         max_tokens: 6000,
-        thinking: { type: 'disabled' },
+        ...(model.includes('opus') ? {} : { thinking: { type: 'disabled' } }),
         tools: [JUDGE_TOOL],
         tool_choice: { type: 'tool', name: 'judge_candidates' },
         messages: [{ role: 'user', content: prompt }],
@@ -195,7 +195,7 @@ serve(async (req) => {
       return json({ success: false, code: 'INVALID_REQUEST', message: 'videoId e candidatos são obrigatórios.' }, 400);
     }
 
-    const cacheSeed = `viral-judge-v1-${videoId}-${duration[0]}-${duration[1]}-${candidates.length}`;
+    const cacheSeed = `viral-judge-v2-${videoId}-${duration[0]}-${duration[1]}-${candidates.length}`;
     const cacheKey = await generateCacheKey(cacheSeed);
     if (!refresh) {
       const { data } = await supabase.from('api_search_cache').select('response, created_at').eq('cache_key', cacheKey).maybeSingle();
@@ -239,7 +239,7 @@ serve(async (req) => {
     console.log('JUDGE', 'candidates', candidates.length, 'judged', judged.length, 'kept', judged.filter((j) => j?.keep === true).length, 'failedBatches', failedBatches);
 
     const byId = new Map(candidates.map((c) => [c.id, c]));
-    const maxAllowed = Math.min(MAX_CLIP_SECONDS, Math.ceil(duration[1] * 1.25) + 5);
+    const maxAllowed = Math.min(MAX_CLIP_SECONDS, Math.ceil(duration[1] * 1.15) + 2);
     const nearest = (list: SliceSentence[], t: number) =>
       list.reduce((best, s, i) => (Math.abs(s.start - t) < Math.abs(list[best].start - t) ? i : best), 0);
 
@@ -252,17 +252,23 @@ serve(async (req) => {
       let start = cand.start;
       let end = cand.end;
       if (sentences.length > 0 && typeof j.start === 'number' && typeof j.end === 'number') {
-        const si = nearest(sentences, j.start);
-        const ei = nearest(sentences, j.end);
+        let si = nearest(sentences, j.start);
+        let ei = Math.max(si, nearest(sentences, j.end));
+        // A sentence that starts lowercase is the tail of one the transcript split
+        // at a speaker change: begin on the next real sentence instead.
+        while (si < ei && /^[a-z\u00e0-\u00fc]/.test(sentences[si].text.trim())) si++;
+        // A last "sentence" with no closing punctuation was cut mid-thought: end on the previous one.
+        while (ei > si && !/[.!?\u2026"\u201d)]\s*$/.test(sentences[ei].text.trim())) ei--;
         const cutStart = sentences[si].start;
-        const cutEnd = sentences[Math.max(si, ei)].end;
+        const cutEnd = sentences[ei].end;
         const dur = cutEnd - cutStart;
-        // Only trust the judge's cut when it is a usable length; otherwise keep the first-pass cut.
         if (dur >= MIN_CLIP_SECONDS && dur <= maxAllowed) {
           start = cutStart;
           end = cutEnd;
         }
       }
+      // Hard limit: a cut still over the requested length is dropped, never shipped.
+      if (end - start > maxAllowed || end - start < MIN_CLIP_SECONDS) continue;
 
       const titles = [j.title1, j.title2, j.title3]
         .filter((t: unknown) => typeof t === 'string' && t.trim())
