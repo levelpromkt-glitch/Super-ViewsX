@@ -392,11 +392,16 @@ serve(async (req) => {
     // glued together). Clamping it to the end used to collapse it into a
     // few-second clip; drop it instead so it can't pose as a real moment.
     const OVERFLOW_TOLERANCE_SEC = 5;
+    // Models occasionally slip on one boundary and return a moment many times
+    // longer than asked (e.g. 966s for a 30-60s preset). The clip service caps
+    // clips at 180s anyway, so anything far beyond the preset is unusable.
+    const maxMomentSec = Math.min(180, Math.ceil(duration[1] * 1.6) + 10);
     const inBounds = (m: any) =>
       typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start &&
-      m.start < videoDurationSec && m.end <= videoDurationSec + OVERFLOW_TOLERANCE_SEC;
+      m.start < videoDurationSec && m.end <= videoDurationSec + OVERFLOW_TOLERANCE_SEC &&
+      m.end - m.start <= maxMomentSec;
     const outOfBounds = momentsList.filter((m) => !inBounds(m)).length;
-    if (outOfBounds > 0) console.warn('viral-moments dropped out-of-bounds moments', outOfBounds, 'of', momentsList.length);
+    if (outOfBounds > 0) console.warn('viral-moments dropped invalid moments', outOfBounds, 'of', momentsList.length);
 
     const moments = momentsList
       .filter(inBounds)
