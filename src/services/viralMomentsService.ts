@@ -140,10 +140,11 @@ export const ViralMomentsService = {
     title: string,
     lines: TranscriptLine[],
     duration: DurationPreset,
-    audioSignals?: AudioSignal[]
+    audioSignals?: AudioSignal[],
+    refresh = false
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, audioSignals },
+      body: { videoId, title, lines, duration, audioSignals, refresh },
     });
 
     if (error) {

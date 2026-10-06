@@ -13,6 +13,7 @@ import {
   Link2,
   Loader2,
   Play,
+  RefreshCw,
   Send,
   Sparkles,
   Upload,
@@ -193,6 +194,9 @@ function MelhoresMomentosPage() {
   const [moments, setMoments] = useState<ViralMoment[] | null>(null);
   const [videoTopic, setVideoTopic] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
+  // Kept after a successful analysis so the moments can be re-run (another
+  // length, or a fresh attempt) without uploading/transcribing again.
+  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[] } | null>(null);
   const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
   const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
   const [clipPreviewError, setClipPreviewError] = useState<string | null>(null);
@@ -259,6 +263,7 @@ function MelhoresMomentosPage() {
     }
 
     setUrlError(null);
+    setAnalysis(null);
     setVideoId(id);
     setStoragePath(null);
     setMoments(null);
@@ -276,6 +281,7 @@ function MelhoresMomentosPage() {
       const transcript = await TranscriptService.getTranscript(id);
       setLoadingStatus("Analisando os melhores momentos com IA...");
       const result = await ViralMomentsService.findBestMoments(id, "", transcript.lines, duration);
+      setAnalysis({ key: id, lines: transcript.lines, audioSignals: undefined });
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
@@ -304,6 +310,7 @@ function MelhoresMomentosPage() {
     }
 
     setUrlError(null);
+    setAnalysis(null);
     setVideoId(null);
     setStoragePath(null);
     setMoments(null);
@@ -344,6 +351,7 @@ function MelhoresMomentosPage() {
 
       setLoadingStatus("Analisando os melhores momentos com IA...");
       const result = await ViralMomentsService.findBestMoments(key, "", lines, duration, audioSignals);
+      setAnalysis({ key, lines, audioSignals });
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
 
@@ -366,6 +374,38 @@ function MelhoresMomentosPage() {
   };
 
   const handleAnalyze = () => (sourceMode === "youtube" ? handleAnalyzeYoutube() : handleAnalyzeUpload());
+
+  const handleReanalyze = async () => {
+    if (!analysis || loading) return;
+    setUrlError(null);
+    setMoments(null);
+    setVideoTopic(null);
+    setActiveMoment(null);
+    setClipPreviewUrl(null);
+    setClipPreviewError(null);
+    setMinScore(0);
+    setSelectedTitle({});
+    setUseHook({});
+    setLoading(true);
+    setLoadingStatus("Analisando os melhores momentos com IA...");
+    try {
+      const result = await ViralMomentsService.findBestMoments(analysis.key, "", analysis.lines, duration, analysis.audioSignals, true);
+      setMoments(result.moments);
+      setVideoTopic(result.videoTopic || null);
+      if (sourceMode === "upload" && uploadFile) {
+        const videoUrl = URL.createObjectURL(uploadFile);
+        generateMomentThumbnails(result.moments, videoUrl)
+          .then(setMomentThumbnails)
+          .catch((e) => console.error("Falha ao gerar capas dos cortes", e))
+          .finally(() => URL.revokeObjectURL(videoUrl));
+      }
+    } catch (error: any) {
+      setUrlError(error instanceof ViralMomentsError ? error.message : "Ocorreu um erro inesperado ao analisar o vídeo.");
+    } finally {
+      setLoading(false);
+      setLoadingStatus("");
+    }
+  };
 
   // Dropping a video file anywhere on the input card switches straight to
   // upload mode and attaches it — no need to click "Enviar vídeo" first.
@@ -838,6 +878,22 @@ function MelhoresMomentosPage() {
               </div>
             )}
           </div>
+          {analysis && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="hs-btn-ghost"
+                style={{ flex: "none" }}
+                onClick={handleReanalyze}
+                disabled={loading}
+              >
+                <RefreshCw size={12} /> Reanalisar
+              </button>
+              <span style={{ fontSize: ".72rem", color: "var(--text-muted)" }}>
+                Roda a análise de novo com a duração escolhida acima, sem reenviar o vídeo.
+              </span>
+            </div>
+          )}
           {downloadError && <div className="tr-error">{downloadError}</div>}
 
           {moments.length === 0 ? (

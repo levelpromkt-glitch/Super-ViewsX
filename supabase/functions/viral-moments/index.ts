@@ -136,7 +136,7 @@ const buildPrompt = (
 ) => {
   const transcriptText = lines
     .slice(0, MAX_LINES)
-    .map((l) => `[${l.time}] ${l.text}`)
+    .map((l) => `[${Math.floor(Number.isFinite(l.start) ? l.start : l.seconds || 0)}] ${l.text}`)
     .join("\n");
 
   const [minSec, maxSec] = duration;
@@ -148,12 +148,10 @@ const buildPrompt = (
     ? "\n\n## Sinais de áudio detectados automaticamente (apoio, não é texto da fala)\n\nEstes pontos vêm de uma análise do áudio bruto (volume e sobreposição de fala), não da transcrição. Use como indício extra de tensão, energia ou humor — nunca como único motivo para aprovar um trecho, e nunca cite isso na headline ou no reason.\n\n" +
       audioSignals
         .map((s) => {
-          const mm = String(Math.floor(s.time / 60)).padStart(2, "0");
-          const ss = String(s.time % 60).padStart(2, "0");
           const label = s.type === "interruption"
             ? "fala sobreposta/interrupção (possível tensão ou discordância)"
             : "pico de volume/energia na voz";
-          return `[${mm}:${ss}] ${label}`;
+          return `[${Math.floor(s.time)}] ${label}`;
         })
         .join("\n")
     : "";
@@ -224,7 +222,7 @@ O criador escolhe qual usar como título do post; cada uma das 3 precisa ser for
 - As 3 variações usam ângulos DIFERENTES do mesmo trecho — não são sinônimos umas das outras. Exemplos de ângulos pra variar: a pergunta que o trecho responde vs. a afirmação polêmica vs. o número/resultado chocante vs. a virada de expectativa.
 - Nunca use reticências como muleta de suspense genérico ("Isso vai mudar tudo...") — se não dá pra ser específico, o trecho provavelmente não deveria ter sido aprovado.
 - Nunca use aspas dentro do texto da headline — parafraseie em vez de citar literalmente, para não quebrar nada na hora de estruturar a resposta.
-- **Fidelidade de contexto é inegociável**: antes de escrever as 3 headlines, releia literalmente só o texto entre "start" e "end" desse trecho — não o que vem antes, não o que vem depois, não um resumo de memória do vídeo inteiro. Cada headline só pode afirmar algo que está dito, com essas palavras ou o mesmo sentido, DENTRO desse intervalo exato. Se a frase que te fez pensar na headline está em outro [MM:SS] fora do intervalo, ou é só sua inferência do contexto geral do vídeo, ou ajuste "start"/"end" pra incluir essa frase, ou descarte essa headline — nunca descreva um trecho pelo assunto geral do vídeo quando o que é dito ali, especificamente, é outra coisa.
+- **Fidelidade de contexto é inegociável**: antes de escrever as 3 headlines, releia literalmente só o texto entre "start" e "end" desse trecho — não o que vem antes, não o que vem depois, não um resumo de memória do vídeo inteiro. Cada headline só pode afirmar algo que está dito, com essas palavras ou o mesmo sentido, DENTRO desse intervalo exato. Se a frase que te fez pensar na headline está em outra linha fora do intervalo, ou é só sua inferência do contexto geral do vídeo, ou ajuste "start"/"end" pra incluir essa frase, ou descarte essa headline — nunca descreva um trecho pelo assunto geral do vídeo quando o que é dito ali, especificamente, é outra coisa.
 
 ## Gancho viral — sempre calcule uma segunda opção de abertura mais agressiva
 
@@ -241,9 +239,9 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 - MAXIMIZE VOLUME: percorra o vídeo INTEIRO do início ao fim procurando ativamente todos os momentos independentes que passam no teste de admissão — não pare depois de achar 1, 2 ou 3. Se o vídeo sustenta 15 trechos genuinamente aprovados, devolva os 15. Trechos podem vir de qualquer parte do vídeo e não precisam ser sobre o mesmo sub-tema. O objetivo é dar ao criador o máximo de oportunidades de postar, não uma lista curta e "segura".
 - A única razão válida para descartar um candidato é ele genuinamente falhar no teste Hook/Desenvolvimento/Payoff, em um dos dois portões, ou em algum dos reprovadores automáticos acima — nunca descarte um trecho aprovado só porque já existem outros na lista.
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
-- "start" e "end" são em SEGUNDOS (inteiros), calculados a partir dos timestamps [MM:SS] da transcrição, com "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
+- "start" e "end" são em SEGUNDOS (inteiros). O número entre colchetes no início de cada linha da transcrição JÁ É o segundo exato em que a linha começa no vídeo (ex.: [3786] é 63 min e 6 s). Copie esses números direto em "start" e "end" — NUNCA converta para minutos:segundos nem junte dígitos. Nenhum valor pode passar do último número da transcrição. "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
 
-Transcrição (formato [MM:SS] texto):
+Transcrição (formato [segundo] texto):
 ${transcriptText}
 ${audioSignalsText}
 
@@ -263,6 +261,7 @@ serve(async (req) => {
     const durationKey: string = body?.duration;
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
+    const refresh: boolean = body?.refresh === true;
 
     if (!videoId || typeof videoId !== 'string') {
       return new Response(
@@ -277,9 +276,9 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v12-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v13-${videoId}-${duration[0]}-${duration[1]}`;
 
-    const cached = await getCache(cacheSeed);
+    const cached = refresh ? null : await getCache(cacheSeed);
     if (cached) {
       return new Response(
         JSON.stringify({ success: true, videoId, moments: cached.moments, meta: { ...cached.meta, cached: true } }),
@@ -368,10 +367,11 @@ serve(async (req) => {
     }
 
     const videoDurationSec = lines.length > 0 ? lines[lines.length - 1].start + lines[lines.length - 1].duration : Infinity;
+    console.log('RAW moments', momentsList.length, 'videoDurationSec', videoDurationSec, 'preset', duration.join('-'), JSON.stringify(momentsList.map((m: any) => [m.start, m.end, m.score])));
 
     const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
 
-    // The model only sees [MM:SS]-resolution timestamps, so its raw start/end
+    // The model only sees whole-second timestamps, so its raw start/end
     // can land a beat into the middle of a sentence — the actual audio a user
     // hears then starts/ends on words that don't match the headline/reason
     // written for that moment. Snapping each boundary to the real line it
@@ -388,8 +388,18 @@ serve(async (req) => {
       return best;
     };
 
+    // A moment whose times fall outside the video is a model slip (e.g. digits
+    // glued together). Clamping it to the end used to collapse it into a
+    // few-second clip; drop it instead so it can't pose as a real moment.
+    const OVERFLOW_TOLERANCE_SEC = 5;
+    const inBounds = (m: any) =>
+      typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start &&
+      m.start < videoDurationSec && m.end <= videoDurationSec + OVERFLOW_TOLERANCE_SEC;
+    const outOfBounds = momentsList.filter((m) => !inBounds(m)).length;
+    if (outOfBounds > 0) console.warn('viral-moments dropped out-of-bounds moments', outOfBounds, 'of', momentsList.length);
+
     const moments = momentsList
-      .filter((m) => typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start)
+      .filter(inBounds)
       .map((m, i) => {
         const rawStart = Math.max(0, Math.min(m.start, videoDurationSec));
         const rawEnd = Math.max(0, Math.min(m.end, videoDurationSec));
@@ -431,6 +441,7 @@ serve(async (req) => {
       .filter((m) => m.end - m.start >= MIN_CLIP_SECONDS)
       .sort((a, b) => b.score - a.score);
 
+    console.log('FINAL moments', moments.length);
     const executionTime = Date.now() - startTime;
     const videoTopic = typeof videoTopicOut === 'string' ? videoTopicOut.slice(0, 400) : undefined;
     const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false, videoTopic };
