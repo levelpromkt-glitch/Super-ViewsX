@@ -398,10 +398,11 @@ serve(async (req) => {
     // glued together). Clamping it to the end used to collapse it into a
     // few-second clip; drop it instead so it can't pose as a real moment.
     const OVERFLOW_TOLERANCE_SEC = 5;
-    // Models occasionally slip on one boundary and return a moment many times
-    // longer than asked (e.g. 966s for a 30-60s preset). The clip service caps
-    // clips at 180s anyway, so anything far beyond the preset is unusable.
-    const maxMomentSec = Math.min(180, Math.ceil(duration[1] * 1.6) + 10);
+    // Candidates may run well past the requested length: the judge pass picks
+    // the best cut of the right length inside them, so dropping a 90s candidate
+    // here would throw away a good idea. Only an absurd length (e.g. 966s for a
+    // 30-60s preset) is a model slip; the clip service also caps clips at 180s.
+    const maxMomentSec = Math.min(180, Math.max(Math.ceil(duration[1] * 1.6) + 10, 100));
     const inBounds = (m: any) =>
       typeof m.start === 'number' && typeof m.end === 'number' && m.end > m.start &&
       m.start < videoDurationSec && m.end <= videoDurationSec + OVERFLOW_TOLERANCE_SEC &&

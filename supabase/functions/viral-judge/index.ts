@@ -94,8 +94,8 @@ const buildPrompt = (batch: Candidate[], duration: [number, number], videoTopic:
   const [minSec, maxSec] = duration;
   const blocks = batch.map((c) => {
     const sentences = parseSlice(c.slice);
-    const text = sentences.map((s) => `[${s.start.toFixed(1)}] ${s.text}`).join('\n');
-    return `### Candidato ${c.id} (proposta inicial: ${c.start.toFixed(1)}s até ${c.end.toFixed(1)}s, ${Math.round(c.end - c.start)}s)\nHeadline proposta: ${c.title || ''}\n\nTranscrição (um número entre colchetes por frase = segundo em que a frase começa; há contexto antes e depois da proposta):\n${text}`;
+    const text = sentences.map((s) => `[${s.start.toFixed(1)} → ${s.end.toFixed(1)}] ${s.text}`).join('\n');
+    return `### Candidato ${c.id} (proposta inicial: ${c.start.toFixed(1)}s até ${c.end.toFixed(1)}s, ${Math.round(c.end - c.start)}s)\nHeadline proposta: ${c.title || ''}\n\nTranscrição (entre colchetes: segundo em que a frase começa → segundo em que termina; há contexto antes e depois da proposta):\n${text}`;
   }).join('\n\n');
 
   return `Você é o editor-chefe de uma operação de cortes virais para TikTok, Reels e Shorts. Você é EXIGENTE e cético: o criador já recebeu listas longas de cortes medianos e o que ele precisa agora é só de cortes que realmente podem viralizar. Aprovar um corte fraco custa a ele tempo e alcance; reprovar um corte bom custa quase nada, porque existem outros candidatos.
@@ -119,7 +119,9 @@ Escolha os rótulos de início e fim DENTRO da transcrição do candidato (pode 
 - start = rótulo da PRIMEIRA frase do corte, e ela tem que ser o HOOK. Corte fora qualquer frase de introdução, muleta ("então", "né", "cara"), frase pela metade, pergunta de transição do entrevistador (a menos que a própria pergunta seja o hook) ou contexto que só faz sentido depois.
 - end = rótulo da ÚLTIMA frase do corte (ela entra inteira): a frase que fecha a ideia, dita por quem está contando. Pare no payoff. NUNCA termine numa pergunta dirigida ao outro participante ("faz sentido?", "como foi isso?"), nem inclua a pergunta seguinte do entrevistador, agradecimento, "então...", nem frase que ficou no meio ou cortada.
 - A duração (do início da primeira frase ao fim da última) tem que ficar entre ${minSec}s e ${maxSec}s — é um limite RÍGIDO (cortes acima disso são descartados automaticamente). Se a melhor versão do trecho for maior que o limite, escolha o recorte mais forte dentro do limite que ainda feche a ideia; se não der para fechar a ideia dentro do limite, reprove.
-- Copie os rótulos exatamente como aparecem.
+- Calcule a duração antes de responder: (fim da última frase) − (início da primeira frase). Se passar de ${maxSec}s, escolha frases mais perto do hook/payoff até caber.
+- Em start e end copie o PRIMEIRO número do colchete (o início da frase), exatamente como aparece.
+- Responda SEMPRE chamando a tool judge_candidates, nunca em texto.
 
 ## 3. score (0 a 100) — potencial viral REAL
 - 90 a 100: raríssimo, 1 ou 2 no vídeo inteiro. Você apostaria que vai performar muito acima da média.
@@ -147,10 +149,12 @@ const callJudge = async (apiKey: string, model: string, prompt: string) => {
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model,
-        max_tokens: 6000,
+        // Opus rejects a forced tool_choice (and thinks by default), so it gets "auto" + room for
+        // thinking; the other models are forced to answer through the tool with thinking off.
+        max_tokens: model.includes('opus') ? 16000 : 6000,
         ...(model.includes('opus') ? {} : { thinking: { type: 'disabled' } }),
         tools: [JUDGE_TOOL],
-        tool_choice: { type: 'tool', name: 'judge_candidates' },
+        tool_choice: model.includes('opus') ? { type: 'auto' } : { type: 'tool', name: 'judge_candidates' },
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -164,7 +168,11 @@ const callJudge = async (apiKey: string, model: string, prompt: string) => {
     if (typeof results === 'string') {
       try { results = JSON.parse(results); } catch { results = undefined; }
     }
-    return { ok: true as const, results: Array.isArray(results) ? results : [], usage: data?.usage };
+    if (!Array.isArray(results)) {
+      // No usable tool call (e.g. auto mode answered in text): let the next model try.
+      return { ok: false as const, status: 200, errText: `no tool result, stop_reason=${data?.stop_reason}` };
+    }
+    return { ok: true as const, results, usage: data?.usage };
   } finally {
     clearTimeout(timer);
   }
@@ -195,7 +203,7 @@ serve(async (req) => {
       return json({ success: false, code: 'INVALID_REQUEST', message: 'videoId e candidatos são obrigatórios.' }, 400);
     }
 
-    const cacheSeed = `viral-judge-v2-${videoId}-${duration[0]}-${duration[1]}-${candidates.length}`;
+    const cacheSeed = `viral-judge-v3-${videoId}-${duration[0]}-${duration[1]}-${candidates.length}`;
     const cacheKey = await generateCacheKey(cacheSeed);
     if (!refresh) {
       const { data } = await supabase.from('api_search_cache').select('response, created_at').eq('cache_key', cacheKey).maybeSingle();
@@ -212,6 +220,7 @@ serve(async (req) => {
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) batches.push(candidates.slice(i, i + BATCH_SIZE));
 
     let modelUsed = JUDGE_MODELS[0];
+    const modelErrors: string[] = [];
     const runBatch = async (batch: Candidate[]) => {
       const prompt = buildPrompt(batch, duration, videoTopic);
       for (const model of JUDGE_MODELS) {
@@ -221,8 +230,10 @@ serve(async (req) => {
             modelUsed = model;
             return result.results as any[];
           }
+          modelErrors.push(`${model}: ${result.status} ${result.errText.slice(0, 200)}`);
           console.error('viral-judge model error', model, result.status, result.errText.slice(0, 300));
         } catch (err) {
+          modelErrors.push(`${model}: ${(err as Error).message}`);
           console.error('viral-judge call failed', model, (err as Error).message);
         }
       }
@@ -244,6 +255,7 @@ serve(async (req) => {
       list.reduce((best, s, i) => (Math.abs(s.start - t) < Math.abs(list[best].start - t) ? i : best), 0);
 
     const final: any[] = [];
+    let droppedByLength = 0;
     for (const j of judged) {
       const cand = j && typeof j.id === 'string' ? byId.get(j.id) : undefined;
       if (!cand || j.keep !== true) continue;
@@ -268,7 +280,7 @@ serve(async (req) => {
         }
       }
       // Hard limit: a cut still over the requested length is dropped, never shipped.
-      if (end - start > maxAllowed || end - start < MIN_CLIP_SECONDS) continue;
+      if (end - start > maxAllowed || end - start < MIN_CLIP_SECONDS) { droppedByLength++; continue; }
 
       const titles = [j.title1, j.title2, j.title3]
         .filter((t: unknown) => typeof t === 'string' && t.trim())
@@ -288,8 +300,18 @@ serve(async (req) => {
     }
 
     final.sort((a, b) => b.score - a.score);
-    const moments = final.map((m, i) => ({ id: `m${i + 1}`, ...m }));
-    const meta = { model: modelUsed, executionTime: Date.now() - startedAt, candidates: candidates.length, kept: moments.length, failedBatches, cached: false };
+    // Two candidates can land on the same passage: keep only the higher-scored one
+    // when more than half of the shorter cut is shared.
+    const unique: any[] = [];
+    for (const m of final) {
+      const dup = unique.some((u) => {
+        const overlap = Math.min(u.end, m.end) - Math.max(u.start, m.start);
+        return overlap > 0.5 * Math.min(u.end - u.start, m.end - m.start);
+      });
+      if (!dup) unique.push(m);
+    }
+    const moments = unique.map((m, i) => ({ id: `m${i + 1}`, ...m }));
+    const meta = { model: modelUsed, executionTime: Date.now() - startedAt, candidates: candidates.length, keptByJudge: judged.filter((j) => j?.keep === true).length, droppedByLength, kept: moments.length, failedBatches, modelErrors, cached: false };
 
     // Don't cache a partial result: a failed batch would otherwise stick for 24h.
     if (failedBatches === 0) {
