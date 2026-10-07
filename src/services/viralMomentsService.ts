@@ -19,6 +19,9 @@ export type ViralMoment = {
   score: number;
   // First-pass transcript context ("start|end|text"), only used to feed the judge pass.
   slice?: string[];
+  // A candidate that did not make the recommended list (kept so the creator can still judge it).
+  other?: boolean;
+  rejectReason?: string;
 };
 
 export class ViralMomentsError extends Error {
@@ -160,10 +163,12 @@ export const ViralMomentsService = {
     refresh = false,
     words?: [string, number, number][],
     // Passages the creator already has cuts of: the AI must look for other moments.
-    exclude?: { start: number; end: number }[]
+    exclude?: { start: number; end: number }[],
+    // The transcript is only one window of a longer video (the AI is told to look just there).
+    windowed = false
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, audioSignals, refresh, words, exclude },
+      body: { videoId, title, lines, duration, audioSignals, refresh, words, exclude, windowed },
     });
 
     if (error) {
@@ -185,7 +190,7 @@ export const ViralMomentsService = {
     videoTopic: string | undefined,
     candidates: ViralMoment[],
     refresh = false
-  ): Promise<ViralMoment[]> {
+  ): Promise<{ moments: ViralMoment[]; rejected: ViralMoment[] }> {
     const { data, error } = await supabase.functions.invoke("viral-judge", {
       body: {
         videoId,
@@ -212,6 +217,6 @@ export const ViralMomentsService = {
     if (!data?.success) {
       throw new ViralMomentsError(data?.message || "Erro ao refinar os cortes.", data?.code || "UNKNOWN_ERROR");
     }
-    return data.moments as ViralMoment[];
+    return { moments: data.moments as ViralMoment[], rejected: (data.rejected ?? []) as ViralMoment[] };
   },
 };

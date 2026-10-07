@@ -4076,3 +4076,16 @@ select.pb-input option { background: #0F140F; color: var(--text-main); }
 .mm-phead-actions .hs-btn-ghost { white-space: nowrap; flex: none; }
 .mm-banner-notice { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(158,255,46,.3); background: rgba(158,255,46,.05); color: var(--text-main); font-size: .82rem; }
 .mm-banner-notice .hs-btn-ghost { margin-left: auto; flex: none; }
+
+/* ===== Melhores Momentos: outros candidatos ===== */
+.mm-others { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.mm-others-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px dashed rgba(255,255,255,.16); border-radius: 14px; background: rgba(255,255,255,.015); color: var(--text-main); font-family: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.mm-others-head:hover { border-color: rgba(158,255,46,.4); background: rgba(158,255,46,.03); }
+.mm-others-head span { display: flex; flex-direction: column; gap: 2px; }
+.mm-others-head strong { font-size: .92rem; }
+.mm-others-head small { font-size: .76rem; color: var(--text-muted); }
+.mm-others-caret { flex: none; color: var(--text-muted); transition: transform .15s ease; transform: rotate(-90deg); }
+.mm-others-caret[data-open="true"] { transform: rotate(0deg); }
+.mm-card-other { border-style: dashed; }
+.mm-reject { display: flex; align-items: flex-start; gap: 7px; padding: 8px 10px; border-radius: 10px; background: rgba(255,200,87,.07); color: #e8c982; line-height: 1.4; }
+.mm-reject svg { flex: none; margin-top: 2px; }

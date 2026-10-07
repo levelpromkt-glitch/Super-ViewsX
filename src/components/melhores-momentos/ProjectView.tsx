@@ -111,7 +111,11 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
   }, [runsCount]);
 
   const moments: StoredMoment[] = activeRun?.moments ?? [];
-  const visible = useMemo(() => moments.filter((m) => m.score >= minScore), [moments, minScore]);
+  // Recommended cuts, and the candidates the judge left out (kept with the reason they stayed out).
+  const tops = useMemo(() => moments.filter((m) => !m.other), [moments]);
+  const others = useMemo(() => moments.filter((m) => m.other), [moments]);
+  const [showOthers, setShowOthers] = useState(false);
+  const visible = useMemo(() => tops.filter((m) => m.score >= minScore), [tops, minScore]);
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pageItems = visible.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -316,6 +320,143 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
     { label: "Melhores momentos encontrados", activeLabel: "Encontrando os melhores momentos" },
   ];
 
+  const renderCard = (m: StoredMoment) => {
+                const k = keyOf(m);
+                const effectiveStart = getEffectiveStart(m);
+                const titleIndex = selectedTitle[k] ?? 0;
+                const hookOn = useHook[k] === true;
+                const cover = m.thumb || (youtube ? `https://img.youtube.com/vi/${project.source_key}/hqdefault.jpg` : null) || project.thumbnail;
+                return (
+                  <article key={k} className={`hs-card${m.other ? " mm-card-other" : ""}`}>
+                    <div className="hs-thumb" style={{ position: "relative", overflow: "hidden", cursor: "pointer" }} onClick={() => handleOpenMoment(m)}>
+                      {cover && (
+                        <img
+                          src={cover}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, objectFit: "cover", zIndex: 0 }}
+                        />
+                      )}
+                      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 1 }}></div>
+                      <Play size={26} className="hs-thumb-play" style={{ position: "relative", zIndex: 2 }} />
+                      <span className="hs-thumb-speed" style={{ position: "relative", zIndex: 2 }}>
+                        <Flame size={10} /> {m.score} Score
+                      </span>
+                    </div>
+                    <div className="hs-card-body">
+                      <h3 className="hs-card-title m-0">{getEffectiveTitle(m)}</h3>
+                      {m.titles.length > 1 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                          {m.titles.map((t, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              className="hs-btn-ghost"
+                              style={{
+                                flex: "none",
+                                padding: "3px 9px",
+                                fontSize: ".7rem",
+                                borderColor: titleIndex === i ? "var(--primary-lime)" : undefined,
+                                color: titleIndex === i ? "var(--primary-lime)" : undefined,
+                              }}
+                              onClick={() => setSelectedTitle((prev) => ({ ...prev, [k]: i }))}
+                              title={t}
+                            >
+                              Headline {i + 1}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {m.profile && <span className="hs-card-tag" style={{ marginLeft: 0 }}>{PROFILE_LABELS[m.profile]}</span>}
+                      <div className="hs-card-row">
+                        <span className="hs-card-views">
+                          <Clock size={12} /> {formatTime(effectiveStart)} – {formatTime(m.end)}
+                        </span>
+                        <span className="hs-card-time">{formatDuration(m.end - effectiveStart)}</span>
+                      </div>
+                      <div className="hs-card-meta">
+                        <span style={{ display: "block", lineHeight: 1.4 }}>{m.reason}</span>
+                      </div>
+                      {m.other && m.rejectReason && (
+                        <div className="hs-card-meta mm-reject">
+                          <TriangleAlert size={12} />
+                          <span>
+                            <b>Por que ficou de fora:</b> {m.rejectReason}
+                          </span>
+                        </div>
+                      )}
+                      {m.hookStart !== undefined && (
+                        <div className="hs-card-meta">
+                          <label style={{ display: "flex", gap: 6, alignItems: "flex-start", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={hookOn}
+                              onChange={(e) => setUseHook((prev) => ({ ...prev, [k]: e.target.checked }))}
+                              style={{ marginTop: 3 }}
+                            />
+                            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--primary-lime)", fontWeight: 600 }}>
+                                <Anchor size={12} /> Usar corte com gancho viral
+                              </span>
+                              {hookOn && <span style={{ lineHeight: 1.4 }}>{m.hookReason}</span>}
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                      <div className="hs-card-actions">
+                        <button className="hs-btn-ghost" onClick={() => handleOpenMoment(m)}>
+                          <Play size={12} /> Assistir trecho
+                        </button>
+                        <button
+                          className="hs-btn-ghost"
+                          onClick={() => handleLike(m)}
+                          disabled={likingId === k || likedIds.has(k)}
+                          style={likedIds.has(k) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
+                        >
+                          {likingId === k ? <Loader2 size={12} className="tr-spin" /> : <Heart size={12} fill={likedIds.has(k) ? "currentColor" : "none"} />}
+                          {likedIds.has(k) ? "Salvo" : "Salvar"}
+                        </button>
+                        <button className="hs-btn-ghost" onClick={() => handleDownload(m)} disabled={downloadingId === k}>
+                          {downloadingId === k ? (
+                            <>
+                              <Loader2 size={12} className="tr-spin" /> Baixando... {downloadProgress[k] ?? 0}%
+                            </>
+                          ) : (
+                            <>
+                              <Download size={12} /> Baixar corte
+                            </>
+                          )}
+                        </button>
+                        {youtube && (
+                          <a
+                            className="hs-btn-ghost"
+                            href={`https://www.youtube.com/watch?v=${project.source_key}&t=${Math.floor(effectiveStart)}s`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ArrowUpRight size={12} /> Abrir no YouTube
+                          </a>
+                        )}
+                        {youtube &&
+                          (publishableAccounts && publishableAccounts.length === 0 ? (
+                            <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
+                              <Send size={12} /> Conectar rede social
+                            </Link>
+                          ) : publishedIds.has(k) ? (
+                            <span className="hs-btn-ghost" style={{ color: "var(--primary-lime)", cursor: "default" }}>
+                              <CheckCircle2 size={12} /> Publicado
+                            </span>
+                          ) : (
+                            <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={publishableAccounts === null}>
+                              <Send size={12} /> Publicar
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  </article>
+                );
+  };
+
   return (
     <div className="hs-page">
       <button type="button" className="hs-btn-ghost mm-back" onClick={onBack}>
@@ -448,7 +589,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                 data-active={activeRun?.id === r.id}
                 onClick={() => setActiveRunId(r.id)}
               >
-                {durationLabel(r.duration).replace(" (competição)", "")} · {r.moments.length}
+                {durationLabel(r.duration).replace(" (competição)", "")} · {r.moments.filter((m) => !m.other).length}
               </button>
             ))}
           </div>
@@ -595,9 +736,13 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
       {/* Results */}
       {runs.length > 0 && (
         <>
-          {moments.length === 0 ? (
+          {tops.length === 0 ? (
             <div className="hs-empty">
-              <p>Não encontramos momentos com potencial viral claro nesse vídeo com esta duração. Tente outra duração em "Nova análise".</p>
+              <p>
+                {others.length > 0
+                  ? "Nenhum corte passou na revisão rígida desta vez. Veja os outros candidatos abaixo: você decide quais aproveitar."
+                  : "Não encontramos momentos com potencial viral claro nesse vídeo com esta duração. Tente outra duração em \"Nova análise\"."}
+              </p>
             </div>
           ) : visible.length === 0 ? (
             <div className="hs-empty">
@@ -605,134 +750,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
             </div>
           ) : (
             <section className="hs-grid">
-              {pageItems.map((m) => {
-                const k = keyOf(m);
-                const effectiveStart = getEffectiveStart(m);
-                const titleIndex = selectedTitle[k] ?? 0;
-                const hookOn = useHook[k] === true;
-                const cover = m.thumb || (youtube ? `https://img.youtube.com/vi/${project.source_key}/hqdefault.jpg` : null) || project.thumbnail;
-                return (
-                  <article key={k} className="hs-card">
-                    <div className="hs-thumb" style={{ position: "relative", overflow: "hidden", cursor: "pointer" }} onClick={() => handleOpenMoment(m)}>
-                      {cover && (
-                        <img
-                          src={cover}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                          style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, objectFit: "cover", zIndex: 0 }}
-                        />
-                      )}
-                      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 1 }}></div>
-                      <Play size={26} className="hs-thumb-play" style={{ position: "relative", zIndex: 2 }} />
-                      <span className="hs-thumb-speed" style={{ position: "relative", zIndex: 2 }}>
-                        <Flame size={10} /> {m.score} Score
-                      </span>
-                    </div>
-                    <div className="hs-card-body">
-                      <h3 className="hs-card-title m-0">{getEffectiveTitle(m)}</h3>
-                      {m.titles.length > 1 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                          {m.titles.map((t, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              className="hs-btn-ghost"
-                              style={{
-                                flex: "none",
-                                padding: "3px 9px",
-                                fontSize: ".7rem",
-                                borderColor: titleIndex === i ? "var(--primary-lime)" : undefined,
-                                color: titleIndex === i ? "var(--primary-lime)" : undefined,
-                              }}
-                              onClick={() => setSelectedTitle((prev) => ({ ...prev, [k]: i }))}
-                              title={t}
-                            >
-                              Headline {i + 1}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {m.profile && <span className="hs-card-tag" style={{ marginLeft: 0 }}>{PROFILE_LABELS[m.profile]}</span>}
-                      <div className="hs-card-row">
-                        <span className="hs-card-views">
-                          <Clock size={12} /> {formatTime(effectiveStart)} – {formatTime(m.end)}
-                        </span>
-                        <span className="hs-card-time">{formatDuration(m.end - effectiveStart)}</span>
-                      </div>
-                      <div className="hs-card-meta">
-                        <span style={{ display: "block", lineHeight: 1.4 }}>{m.reason}</span>
-                      </div>
-                      {m.hookStart !== undefined && (
-                        <div className="hs-card-meta">
-                          <label style={{ display: "flex", gap: 6, alignItems: "flex-start", cursor: "pointer" }}>
-                            <input
-                              type="checkbox"
-                              checked={hookOn}
-                              onChange={(e) => setUseHook((prev) => ({ ...prev, [k]: e.target.checked }))}
-                              style={{ marginTop: 3 }}
-                            />
-                            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                              <span style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--primary-lime)", fontWeight: 600 }}>
-                                <Anchor size={12} /> Usar corte com gancho viral
-                              </span>
-                              {hookOn && <span style={{ lineHeight: 1.4 }}>{m.hookReason}</span>}
-                            </span>
-                          </label>
-                        </div>
-                      )}
-                      <div className="hs-card-actions">
-                        <button className="hs-btn-ghost" onClick={() => handleOpenMoment(m)}>
-                          <Play size={12} /> Assistir trecho
-                        </button>
-                        <button
-                          className="hs-btn-ghost"
-                          onClick={() => handleLike(m)}
-                          disabled={likingId === k || likedIds.has(k)}
-                          style={likedIds.has(k) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
-                        >
-                          {likingId === k ? <Loader2 size={12} className="tr-spin" /> : <Heart size={12} fill={likedIds.has(k) ? "currentColor" : "none"} />}
-                          {likedIds.has(k) ? "Salvo" : "Salvar"}
-                        </button>
-                        <button className="hs-btn-ghost" onClick={() => handleDownload(m)} disabled={downloadingId === k}>
-                          {downloadingId === k ? (
-                            <>
-                              <Loader2 size={12} className="tr-spin" /> Baixando... {downloadProgress[k] ?? 0}%
-                            </>
-                          ) : (
-                            <>
-                              <Download size={12} /> Baixar corte
-                            </>
-                          )}
-                        </button>
-                        {youtube && (
-                          <a
-                            className="hs-btn-ghost"
-                            href={`https://www.youtube.com/watch?v=${project.source_key}&t=${Math.floor(effectiveStart)}s`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ArrowUpRight size={12} /> Abrir no YouTube
-                          </a>
-                        )}
-                        {youtube &&
-                          (publishableAccounts && publishableAccounts.length === 0 ? (
-                            <Link to="/dashboard/configuracoes" className="hs-btn-ghost">
-                              <Send size={12} /> Conectar rede social
-                            </Link>
-                          ) : publishedIds.has(k) ? (
-                            <span className="hs-btn-ghost" style={{ color: "var(--primary-lime)", cursor: "default" }}>
-                              <CheckCircle2 size={12} /> Publicado
-                            </span>
-                          ) : (
-                            <button className="hs-btn-ghost" onClick={() => handleOpenPublish(m)} disabled={publishableAccounts === null}>
-                              <Send size={12} /> Publicar
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {pageItems.map(renderCard)}
             </section>
           )}
 
@@ -751,6 +769,24 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                 </button>
               </div>
             </div>
+          )}
+
+          {others.length > 0 && (
+            <section className="mm-others">
+              <button
+                type="button"
+                className="mm-others-head"
+                aria-expanded={showOthers || tops.length === 0}
+                onClick={() => setShowOthers((o) => !o)}
+              >
+                <ChevronDown size={16} className="mm-others-caret" data-open={showOthers || tops.length === 0} />
+                <span>
+                  <strong>Outros candidatos ({others.length})</strong>
+                  <small>Ficaram de fora das recomendações, mas podem servir. Cada um mostra o motivo.</small>
+                </span>
+              </button>
+              {(showOthers || tops.length === 0) && <div className="hs-grid">{others.map(renderCard)}</div>}
+            </section>
           )}
         </>
       )}

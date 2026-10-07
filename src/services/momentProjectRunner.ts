@@ -14,6 +14,7 @@ import {
   type ProjectTranscript,
   type StoredMoment,
 } from "./momentProjectsService";
+import { buildWindows, dedupeByOverlap, overlapRatio, type Range } from "./momentWindows";
 import {
   extractYouTubeId,
   generateMomentThumbnails,
@@ -91,41 +92,156 @@ const errorMessage = (error: unknown) => {
   return "Ocorreu um erro inesperado ao analisar o vídeo.";
 };
 
-// Two passes: a wide first pass over the whole transcript, then a stricter
-// judge that keeps only the genuinely strong cuts and fixes their boundaries.
-// If the judge itself fails, the first-pass list is still better than nothing.
+// ---------------------------------------------------------------------------
+// Finding the moments
+//
+// 1. The transcript is read in ~10 minute windows (each by its own AI call, a few at a time):
+//    a model that reads a short stretch carefully finds far more than one that skims an hour.
+//    Short videos are a single window.
+// 2. Every window's candidates are merged (overlaps removed) and re-read by a stricter judge,
+//    in chunks, which keeps the genuinely strong cuts and fixes their start and end.
+// 3. What the judge leaves out is not thrown away: the best of it comes back as "other
+//    candidates", each with the reason it stayed out.
+// ---------------------------------------------------------------------------
+
+const WINDOW_CONCURRENCY = 4;
+const CANDIDATES_PER_WINDOW = 9; // when there are several windows
+const CANDIDATES_SINGLE_WINDOW = 30;
+const MAX_CANDIDATES = 80;
+const JUDGE_CHUNK = 24;
+const MAX_OTHERS = 40;
+
+const isNoCredits = (error: unknown) => error instanceof Error && /créditos da IA/i.test(error.message);
+
+type SearchResult = { moments: ViralMoment[]; others: ViralMoment[]; videoTopic?: string; warning?: string };
+
 async function searchMoments(
   key: string,
   transcript: ProjectTranscript,
   duration: DurationPreset,
   refresh: boolean,
-  exclude: { start: number; end: number }[],
+  exclude: Range[],
   onStatus: (status: string) => void
-): Promise<{ moments: ViralMoment[]; videoTopic?: string }> {
-  onStatus("Analisando os melhores momentos com IA...");
-  const first = await ViralMomentsService.findBestMoments(
-    key,
-    "",
-    transcript.lines,
-    duration,
-    transcript.audioSignals,
-    refresh,
-    transcript.words,
-    exclude
-  );
-  const withoutSlices = (list: ViralMoment[]) => list.map(({ slice: _slice, ...rest }) => rest as ViralMoment);
-  if (first.moments.length === 0) return { moments: [], videoTopic: first.videoTopic };
+): Promise<SearchResult> {
+  const withoutSlice = (m: ViralMoment): ViralMoment => {
+    const { slice: _slice, ...rest } = m;
+    return rest as ViralMoment;
+  };
 
-  onStatus("Refinando os cortes com uma segunda IA (só os mais virais passam)...");
-  try {
-    // The judge caches by candidate count, so a round with different candidates must skip that cache.
-    const judged = await ViralMomentsService.judgeMoments(key, duration, first.videoTopic, first.moments, refresh || exclude.length > 0);
-    return { moments: withoutSlices(judged), videoTopic: first.videoTopic };
-  } catch (error) {
-    console.error("Segunda passada falhou, mantendo a primeira", error);
-    return { moments: withoutSlices(first.moments), videoTopic: first.videoTopic };
+  // ---- 1. scan every window
+  const windows = buildWindows(transcript);
+  if (windows.length === 0) return { moments: [], others: [] };
+  const single = windows.length === 1;
+  let done = 0;
+  const report = () =>
+    onStatus(single ? "Analisando os melhores momentos com IA..." : `Lendo o vídeo em partes (${done} de ${windows.length})...`);
+  report();
+
+  const results: ({ moments: ViralMoment[]; videoTopic?: string } | null)[] = new Array(windows.length).fill(null);
+  const errors: unknown[] = [];
+  let next = 0;
+  let fatal: unknown = null;
+
+  const worker = async () => {
+    while (fatal === null) {
+      const i = next++;
+      if (i >= windows.length) return;
+      const w = windows[i];
+      const signals = transcript.audioSignals?.filter((s) => s.time >= w.start && s.time <= w.end);
+      const nearby = exclude.filter((r) => r.end >= w.start - 30 && r.start <= w.end + 30);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await ViralMomentsService.findBestMoments(
+            key, "", w.lines, duration, signals, refresh, w.words, nearby, !single
+          );
+          results[i] = { moments: r.moments, videoTopic: r.videoTopic };
+          break;
+        } catch (error) {
+          if (isNoCredits(error)) {
+            fatal = error;
+            return;
+          }
+          if (attempt === 1) errors.push(error);
+        }
+      }
+      done++;
+      report();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(WINDOW_CONCURRENCY, windows.length) }, worker));
+  if (fatal) throw fatal;
+  if (results.every((r) => r === null)) throw errors[0] ?? new ViralMomentsError("Falha ao analisar o vídeo com IA.", "UNKNOWN_ERROR");
+  const failedWindows = results.filter((r) => r === null).length;
+
+  // ---- merge the windows' candidates
+  const cap = single ? CANDIDATES_SINGLE_WINDOW : CANDIDATES_PER_WINDOW;
+  let candidates: ViralMoment[] = [];
+  results.forEach((r, wi) => {
+    if (!r) return;
+    const best = [...r.moments].sort((a, b) => b.score - a.score).slice(0, cap);
+    best.forEach((m) => candidates.push({ ...m, id: `w${wi}-${m.id}` }));
+  });
+  candidates = dedupeByOverlap(candidates).slice(0, MAX_CANDIDATES);
+  const videoTopic = results.find((r) => r?.videoTopic)?.videoTopic;
+  const warning =
+    failedWindows > 0
+      ? `${failedWindows} ${failedWindows === 1 ? "parte do vídeo não pôde" : "partes do vídeo não puderam"} ser analisada${failedWindows === 1 ? "" : "s"}. Rode "Nova análise" para tentar achar os cortes que faltaram.`
+      : undefined;
+  if (candidates.length === 0) return { moments: [], others: [], videoTopic, warning };
+
+  // ---- 2. judge, in chunks
+  onStatus(`Refinando ${candidates.length} candidatos com uma segunda IA (só os mais virais passam)...`);
+  const chunks: ViralMoment[][] = [];
+  for (let i = 0; i < candidates.length; i += JUDGE_CHUNK) chunks.push(candidates.slice(i, i + JUDGE_CHUNK));
+  const judgedChunks = await Promise.allSettled(
+    chunks.map((c) => ViralMomentsService.judgeMoments(key, duration, videoTopic, c, refresh))
+  );
+
+  const kept: ViralMoment[] = [];
+  const others: ViralMoment[] = [];
+  let judgeOk = 0;
+  judgedChunks.forEach((r, ci) => {
+    if (r.status === "fulfilled") {
+      judgeOk++;
+      kept.push(...r.value.moments);
+      others.push(...r.value.rejected);
+    } else {
+      console.error("Revisão de um grupo de candidatos falhou", r.reason);
+      // Never lose them: they come back as candidates the second AI did not get to review.
+      others.push(
+        ...chunks[ci].map((m) => ({
+          ...withoutSlice(m),
+          other: true,
+          rejectReason: "A segunda IA não conseguiu revisar este candidato. A nota é da primeira análise.",
+        }))
+      );
+    }
+  });
+
+  // Judge down entirely: the first-pass list still beats an empty screen.
+  if (judgeOk === 0) {
+    const firstPass = [...candidates].sort((a, b) => b.score - a.score);
+    return {
+      moments: firstPass.slice(0, CANDIDATES_SINGLE_WINDOW).map(withoutSlice),
+      others: [],
+      videoTopic,
+      warning: warning ?? "A revisão da segunda IA falhou; estes cortes vêm só da primeira análise.",
+    };
   }
+
+  // ---- 3. final lists: recommended first, then the best of the rest
+  const finalMoments = dedupeByOverlap(kept).map((m, i) => ({ ...withoutSlice(m), id: `m${i + 1}` }));
+  const finalOthers = dedupeByOverlap(others)
+    .filter((o) => !finalMoments.some((m) => overlapRatio(m, o) > 0.5))
+    .slice(0, MAX_OTHERS)
+    .map((o, i) => ({ ...withoutSlice(o), id: `o${i + 1}`, other: true }));
+  return { moments: finalMoments, others: finalOthers, videoTopic, warning };
 }
+
+const sortStored = (list: StoredMoment[]): StoredMoment[] => [
+  ...list.filter((m) => !m.other).sort((a, b) => b.score - a.score),
+  ...list.filter((m) => m.other).sort((a, b) => b.score - a.score),
+];
 
 // Last step of every flow: find the moments, save them as a run, mark the project ready.
 async function analyze(
@@ -148,46 +264,53 @@ async function analyze(
   }
   setState(id, { stage: "finding", percent: null, status: "Analisando os melhores momentos com IA...", kind: opts.kind });
 
+  // Everything already in that round (recommended or not) must not come back.
   const exclude = (opts.existing?.moments ?? []).map((m) => ({ start: m.start, end: m.end }));
   const result = await searchMoments(searchKey, transcript, duration, opts.refresh, exclude, (status) =>
     setState(id, { stage: "finding", percent: null, status, kind: opts.kind })
   );
 
   // Safety net: the AI may still return part of a passage that was already cut.
-  const overlapsExisting = (m: { start: number; end: number }) =>
-    exclude.some((r) => Math.min(m.end, r.end) - Math.max(m.start, r.start) > 0.3 * Math.min(m.end - m.start, r.end - r.start));
-  const fresh = opts.existing ? result.moments.filter((m) => !overlapsExisting(m)) : result.moments;
+  const isNew = (m: Range) => !exclude.some((r) => overlapRatio(m, r) > 0.3);
+  const freshMoments = opts.existing ? result.moments.filter(isNew) : result.moments;
+  const freshOthers = opts.existing ? result.others.filter(isNew) : result.others;
 
   let target: MomentRun;
   let added: StoredMoment[];
   let total: number;
 
   if (opts.existing) {
-    if (fresh.length === 0) {
+    if (freshMoments.length + freshOthers.length === 0) {
       setState(id, {
         stage: "ready",
         percent: null,
         status: "",
         kind: opts.kind,
-        notice: "Não encontramos mais cortes novos nesse vídeo com essa duração. Tente outra duração em \"Nova análise\".",
+        notice: result.warning ?? "Não encontramos mais cortes novos nesse vídeo com essa duração. Tente outra duração em \"Nova análise\".",
       });
       return;
     }
     // New ids continue after the existing ones so the cards never collide.
-    let next = opts.existing.moments.reduce((max, m) => Math.max(max, Number(m.id.replace(/\D/g, "")) || 0), 0);
-    added = fresh.map((m) => ({ ...m, id: `m${++next}` }));
-    const merged = [...opts.existing.moments, ...added].sort((a, b) => b.score - a.score);
+    const maxId = (prefix: string) =>
+      opts.existing!.moments.filter((m) => m.id.startsWith(prefix)).reduce((max, m) => Math.max(max, Number(m.id.replace(/\D/g, "")) || 0), 0);
+    let nm = maxId("m");
+    let no = maxId("o");
+    added = [
+      ...freshMoments.map((m) => ({ ...m, id: `m${++nm}` })),
+      ...freshOthers.map((m) => ({ ...m, id: `o${++no}`, other: true })),
+    ];
+    const merged = sortStored([...opts.existing.moments, ...added]);
     await MomentProjectsService.updateRunMoments(opts.existing.id, merged);
     target = { ...opts.existing, moments: merged };
-    total = merged.length;
+    total = merged.filter((m) => !m.other).length;
   } else {
-    added = result.moments as StoredMoment[];
+    added = sortStored([...result.moments, ...result.others] as StoredMoment[]);
     target = await MomentProjectsService.addRun(id, duration, added, result.videoTopic);
-    total = added.length;
+    total = result.moments.length;
   }
 
   await MomentProjectsService.update(id, { stage: "ready", error: null, moments_count: total, requested_duration: null });
-  setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind });
+  setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind, notice: result.warning });
 
   // Covers for the cards come from the file picked in this session; saved with the run
   // so they are still there when the project is reopened later.

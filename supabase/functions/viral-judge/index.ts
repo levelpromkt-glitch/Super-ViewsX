@@ -203,7 +203,8 @@ serve(async (req) => {
       return json({ success: false, code: 'INVALID_REQUEST', message: 'videoId e candidatos são obrigatórios.' }, 400);
     }
 
-    const cacheSeed = `viral-judge-v3-${videoId}-${duration[0]}-${duration[1]}-${candidates.length}`;
+    const candidateSig = candidates.map((c) => `${c.id}:${Math.round(c.start)}-${Math.round(c.end)}`).join(',');
+    const cacheSeed = `viral-judge-v4-${videoId}-${duration[0]}-${duration[1]}-${candidateSig}`;
     const cacheKey = await generateCacheKey(cacheSeed);
     if (!refresh) {
       const { data } = await supabase.from('api_search_cache').select('response, created_at').eq('cache_key', cacheKey).maybeSingle();
@@ -224,17 +225,24 @@ serve(async (req) => {
     const runBatch = async (batch: Candidate[]) => {
       const prompt = buildPrompt(batch, duration, videoTopic);
       for (const model of JUDGE_MODELS) {
-        try {
-          const result = await callJudge(apiKey, model, prompt);
-          if (result.ok) {
-            modelUsed = model;
-            return result.results as any[];
+        // One retry when the API is rate limiting or overloaded (many batches run at once).
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let retryable = false;
+          try {
+            const result = await callJudge(apiKey, model, prompt);
+            if (result.ok) {
+              modelUsed = model;
+              return result.results as any[];
+            }
+            modelErrors.push(`${model}: ${result.status} ${result.errText.slice(0, 200)}`);
+            console.error('viral-judge model error', model, result.status, result.errText.slice(0, 300));
+            retryable = [429, 500, 502, 503, 529].includes(result.status);
+          } catch (err) {
+            modelErrors.push(`${model}: ${(err as Error).message}`);
+            console.error('viral-judge call failed', model, (err as Error).message);
           }
-          modelErrors.push(`${model}: ${result.status} ${result.errText.slice(0, 200)}`);
-          console.error('viral-judge model error', model, result.status, result.errText.slice(0, 300));
-        } catch (err) {
-          modelErrors.push(`${model}: ${(err as Error).message}`);
-          console.error('viral-judge call failed', model, (err as Error).message);
+          if (!retryable || attempt === 1) break;
+          await new Promise((resolve) => setTimeout(resolve, 2500));
         }
       }
       return null;
@@ -255,10 +263,31 @@ serve(async (req) => {
       list.reduce((best, s, i) => (Math.abs(s.start - t) < Math.abs(list[best].start - t) ? i : best), 0);
 
     const final: any[] = [];
+    // Candidates that did not make the cut but are worth a look: the judge's own reason for
+    // leaving them out is kept so the creator can still decide.
+    const others: any[] = [];
     let droppedByLength = 0;
+    const clampScore = (v: unknown) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
     for (const j of judged) {
       const cand = j && typeof j.id === 'string' ? byId.get(j.id) : undefined;
-      if (!cand || j.keep !== true) continue;
+      if (!cand) continue;
+
+      if (j.keep !== true) {
+        const sc = clampScore(j.score);
+        if (sc >= 40) {
+          others.push({
+            start: cand.start,
+            end: cand.end,
+            title: cand.title || (cand.titles && cand.titles[0]) || 'Candidato',
+            titles: cand.titles && cand.titles.length > 0 ? cand.titles : [cand.title || 'Candidato'],
+            profile: VALID_PROFILES.includes(cand.profile as string) ? cand.profile : undefined,
+            reason: String(cand.reason || '').slice(0, 300),
+            rejectReason: String(j.reason || '').slice(0, 300),
+            score: sc,
+          });
+        }
+        continue;
+      }
 
       const sentences = parseSlice(cand.slice);
       let start = cand.start;
@@ -268,9 +297,9 @@ serve(async (req) => {
         let ei = Math.max(si, nearest(sentences, j.end));
         // A sentence that starts lowercase is the tail of one the transcript split
         // at a speaker change: begin on the next real sentence instead.
-        while (si < ei && /^[a-z\u00e0-\u00fc]/.test(sentences[si].text.trim())) si++;
+        while (si < ei && /^[a-zà-ü]/.test(sentences[si].text.trim())) si++;
         // A last "sentence" with no closing punctuation was cut mid-thought: end on the previous one.
-        while (ei > si && !/[.!?\u2026"\u201d)]\s*$/.test(sentences[ei].text.trim())) ei--;
+        while (ei > si && !/[.!?…"”)]\s*$/.test(sentences[ei].text.trim())) ei--;
         const cutStart = sentences[si].start;
         const cutEnd = sentences[ei].end;
         const dur = cutEnd - cutStart;
@@ -279,24 +308,34 @@ serve(async (req) => {
           end = cutEnd;
         }
       }
-      // Hard limit: a cut still over the requested length is dropped, never shipped.
-      if (end - start > maxAllowed || end - start < MIN_CLIP_SECONDS) { droppedByLength++; continue; }
 
       const titles = [j.title1, j.title2, j.title3]
         .filter((t: unknown) => typeof t === 'string' && t.trim())
         .map((t: string) => t.trim().replace(/["“”]/g, '').slice(0, 80));
       if (titles.length === 0) titles.push(...(cand.titles || (cand.title ? [cand.title] : [])));
       if (titles.length === 0) titles.push('Momento viral');
+      const profile = VALID_PROFILES.includes(j.profile) ? j.profile : (VALID_PROFILES.includes(cand.profile as string) ? cand.profile : undefined);
+      const reason = String(j.reason || cand.reason || '').slice(0, 300);
+      const score = clampScore(j.score);
 
-      final.push({
-        start,
-        end,
-        title: titles[0],
-        titles,
-        profile: VALID_PROFILES.includes(j.profile) ? j.profile : (VALID_PROFILES.includes(cand.profile as string) ? cand.profile : undefined),
-        reason: String(j.reason || cand.reason || '').slice(0, 300),
-        score: Math.max(0, Math.min(100, Math.round(Number(j.score) || 0))),
-      });
+      // Hard limit: a cut still over the requested length is never shipped as a recommendation,
+      // but a strong one is kept in the "other candidates" list instead of vanishing.
+      if (end - start > maxAllowed || end - start < MIN_CLIP_SECONDS) {
+        droppedByLength++;
+        others.push({
+          start,
+          end,
+          title: titles[0],
+          titles,
+          profile,
+          reason,
+          rejectReason: `Trecho forte, mas dura ${Math.round(end - start)}s e o limite desta duração é ${maxAllowed}s. Rode uma "Nova análise" com uma duração maior para aproveitá-lo.`,
+          score,
+        });
+        continue;
+      }
+
+      final.push({ start, end, title: titles[0], titles, profile, reason, score });
     }
 
     final.sort((a, b) => b.score - a.score);
@@ -311,6 +350,17 @@ serve(async (req) => {
       if (!dup) unique.push(m);
     }
     const moments = unique.map((m, i) => ({ id: `m${i + 1}`, ...m }));
+
+    // "Other candidates": best first, never a repeat of a recommended cut or of each other.
+    const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) =>
+      Math.min(a.end, b.end) - Math.max(a.start, b.start) > 0.5 * Math.min(a.end - a.start, b.end - b.start);
+    const rejected: any[] = [];
+    for (const o of others.sort((a, b) => b.score - a.score)) {
+      if (unique.some((u) => overlaps(u, o)) || rejected.some((r) => overlaps(r, o))) continue;
+      rejected.push(o);
+      if (rejected.length >= 30) break;
+    }
+    const rejectedOut = rejected.map((o, i) => ({ id: `o${i + 1}`, other: true, ...o }));
     const meta = { model: modelUsed, executionTime: Date.now() - startedAt, candidates: candidates.length, keptByJudge: judged.filter((j) => j?.keep === true).length, droppedByLength, kept: moments.length, failedBatches, modelErrors, cached: false };
 
     // Don't cache a partial result: a failed batch would otherwise stick for 24h.
@@ -321,12 +371,12 @@ serve(async (req) => {
         query: videoId,
         period: 'na',
         min_views: 0,
-        response: { moments, meta },
+        response: { moments, rejected: rejectedOut, meta },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'cache_key' });
     }
 
-    return json({ success: true, videoId, moments, meta });
+    return json({ success: true, videoId, moments, rejected: rejectedOut, meta });
   } catch (error: any) {
     console.error('viral-judge failed', error);
     return json({ success: false, code: 'INTERNAL_ERROR', message: error.message || 'Erro inesperado.' }, 500);

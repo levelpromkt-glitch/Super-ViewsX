@@ -136,7 +136,8 @@ const buildPrompt = (
   sentences: Sentence[],
   duration: [number, number],
   audioSignals?: AudioSignal[],
-  exclude: Range[] = []
+  exclude: Range[] = [],
+  windowed = false
 ) => {
   const transcriptText = sentences
     .slice(0, MAX_SENTENCES)
@@ -171,6 +172,32 @@ O criador já tem cortes destes intervalos (em segundos). Procure OUTROS momento
 
 ` +
       exclude.map((r) => `${Math.round(r.start)}-${Math.round(r.end)}`).join(", ")
+    : "";
+
+  // One prompt looking for "what grabs" keeps finding the same kind of moment. Naming the
+  // kinds of strong cut makes the model look for each of them.
+  const lensText = `
+
+## Varie os ângulos — não devolva só um tipo de momento
+
+O mesmo vídeo costuma ter vários TIPOS de corte forte. Procure ativamente em cada categoria e inclua os melhores de cada uma:
+- **Polêmica**: opinião forte e contra o senso comum, com uma razão por trás;
+- **Número ou resultado**: valor, escala ou resultado concreto que surpreende;
+- **História**: situação com obstáculo, virada e desfecho;
+- **Humor**: punchline, ironia, reação engraçada;
+- **Conselho prático**: passo a passo ou regra que a pessoa pode aplicar hoje;
+- **Revelação**: confissão, bastidor, algo que quase ninguém conta;
+- **Mito derrubado / erro comum**: o que quase todo mundo faz errado.
+Se existe um bom candidato de uma categoria, inclua-o mesmo que o score dele seja menor que o de outra categoria — a variedade faz parte do que o criador precisa. Preencha o campo "profile" de acordo com o tipo do trecho.`;
+
+  // Long videos are scanned in ~10 minute windows, each by its own call: the model keeps its
+  // full attention on a short stretch instead of skimming an hour of text.
+  const scopeText = windowed
+    ? `
+
+## Escopo desta análise (substitui a regra de "vasculhar o vídeo inteiro")
+
+A transcrição abaixo é só UM TRECHO (cerca de 10 minutos) de um vídeo bem maior; as partes vizinhas são analisadas separadamente. Procure candidatos apenas aqui dentro. Devolva de 4 a 12 candidatos desta parte (menos só se ela realmente não tiver momentos fortes). Evite trechos que começam nos primeiros ou nos últimos segundos desta parte, pois podem estar cortados.`
     : "";
 
   return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. O criador que vai receber esses cortes vive de volume: participa de competições de clipagem (minutagem mínima ${MIN_CLIP_SECONDS}s), posta em TikTok, Instagram e YouTube, e precisa do maior número possível de oportunidades genuinamente fortes desse vídeo — não só a melhor. Sua função não é "achar 1 trecho perfeito" — é vasculhar o vídeo inteiro e devolver TODOS os trechos que passem no teste de admissão abaixo.
@@ -260,6 +287,8 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
 - "start" e "end" são em SEGUNDOS (inteiros). O número entre colchetes no início de cada linha da transcrição JÁ É o segundo exato em que a linha começa no vídeo (ex.: [3786] é 63 min e 6 s). Copie esses números direto em "start" e "end" — NUNCA converta para minutos:segundos nem junte dígitos. Nenhum valor pode passar do último número da transcrição. "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
 
+${lensText}${scopeText}
+
 Transcrição (formato [segundo] texto):
 ${transcriptText}
 ${audioSignalsText}${excludeText}
@@ -281,6 +310,7 @@ serve(async (req) => {
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
     const refresh: boolean = body?.refresh === true;
+    const windowed: boolean = body?.windowed === true;
     const exclude: Range[] = Array.isArray(body?.exclude)
       ? body.exclude
           .filter((r: any) => r && Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start)
@@ -302,7 +332,8 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v16-${videoId}-${duration[0]}-${duration[1]}-x${exclude.map((r) => `${Math.round(r.start)}_${Math.round(r.end)}`).join(',')}`;
+    const windowKey = `w${Math.round(lines[0].start)}_${Math.round(lines[lines.length - 1].start + lines[lines.length - 1].duration)}${windowed ? 'k' : ''}`;
+    const cacheSeed = `viral-moments-v17-${videoId}-${duration[0]}-${duration[1]}-${windowKey}-x${exclude.map((r) => `${Math.round(r.start)}_${Math.round(r.end)}`).join(',')}`;
 
     const cached = refresh ? null : await getCache(cacheSeed);
     if (cached) {
@@ -322,7 +353,7 @@ serve(async (req) => {
 
     const startTime = Date.now();
     const sentences = buildSentences(lines, words);
-    const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude);
+    const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude, windowed);
     console.log('SENTENCES', sentences.length, 'lines', lines.length, 'words', words ? words.length : 0);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
