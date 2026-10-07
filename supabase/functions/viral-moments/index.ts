@@ -345,8 +345,15 @@ serve(async (req) => {
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
       console.error('Anthropic API error', aiResponse.status, errText);
+      const noCredits = /credit balance is too low/i.test(errText);
       return new Response(
-        JSON.stringify({ success: false, code: 'AI_API_ERROR', message: 'Falha ao analisar o vídeo com IA.' }),
+        JSON.stringify({
+          success: false,
+          code: noCredits ? 'AI_NO_CREDITS' : 'AI_API_ERROR',
+          message: noCredits
+            ? 'Os créditos da IA acabaram. Recarregue o saldo da API da Anthropic (Plans & Billing) e tente de novo.'
+            : 'Falha ao analisar o vídeo com IA.',
+        }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
