@@ -7,6 +7,8 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
   Film,
@@ -137,7 +139,6 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
     : null;
 
   // ---- player ----
-  const playerRef = useRef<HTMLElement>(null);
   const [activeMoment, setActiveMoment] = useState<StoredMoment | null>(null);
   const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
   const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
@@ -145,8 +146,6 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
 
   const handleOpenMoment = async (m: StoredMoment) => {
     setActiveMoment(m);
-    // The player sits above the results grid, so bring it into view.
-    setTimeout(() => playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
     setClipPreviewUrl(null);
     setClipPreviewError(null);
     if (!clipSource) return;
@@ -163,6 +162,15 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
     setActiveMoment(null);
     setClipPreviewUrl(null);
     setClipPreviewError(null);
+  };
+
+  // The player is a window over the list, so the page never jumps. Previous/next walk the same
+  // group the clip belongs to (recommended or other candidates).
+  const playlist = activeMoment ? (activeMoment.other ? others : visible) : [];
+  const playIndex = activeMoment ? playlist.findIndex((m) => m.id === activeMoment.id) : -1;
+  const goTo = (delta: number) => {
+    const next = playlist[playIndex + delta];
+    if (next) void handleOpenMoment(next);
   };
 
   // ---- download / save / publish ----
@@ -262,6 +270,29 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
       setPublishingId(null);
     }
   };
+
+  const modalOpen = !!activeMoment || !!publishTarget;
+  useEffect(() => {
+    if (!modalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (e.key === "Escape") {
+        if (publishTarget) setPublishTarget(null);
+        else handleCloseMoment();
+      } else if (!publishTarget && tag !== "TEXTAREA" && tag !== "INPUT" && tag !== "SELECT") {
+        if (e.key === "ArrowLeft") goTo(-1);
+        if (e.key === "ArrowRight") goTo(1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, publishTarget, playIndex, playlist.length]);
 
   const handleDelete = async () => {
     if (!project) return;
@@ -636,13 +667,14 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
       )}
       {downloadError && <div className="tr-error">{downloadError}</div>}
 
-      {/* Inline player for the selected moment */}
-      {activeMoment && (
-        <section className="tr-card tr-fade" ref={playerRef}>
+      {/* Player: a window over the list, so the page keeps its place */}
+      {activeMoment && !publishTarget && (
+        <div className="mm-modal-overlay" onClick={handleCloseMoment}>
+        <section className="tr-card mm-modal" role="dialog" aria-modal="true" aria-label="Assistir corte" onClick={(e) => e.stopPropagation()}>
           <div className="tr-card-head">
             <Sparkles size={18} className="tr-icon-lime" />
             <h2>{getEffectiveTitle(activeMoment)}</h2>
-            <button className="hs-btn-ghost" style={{ marginLeft: "auto", flex: "none" }} onClick={handleCloseMoment}>
+            <button className="hs-btn-ghost" style={{ marginLeft: "auto", flex: "none" }} onClick={handleCloseMoment} aria-label="Fechar">
               <X size={12} /> Fechar
             </button>
           </div>
@@ -676,14 +708,49 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                   <Anchor size={12} style={{ flex: "none", marginTop: 3 }} /> {activeMoment.hookReason}
                 </p>
               )}
+              {activeMoment.other && activeMoment.rejectReason && (
+                <p className="mm-reject" style={{ margin: 0, fontSize: ".82rem" }}>
+                  <TriangleAlert size={12} />
+                  <span><b>Por que ficou de fora:</b> {activeMoment.rejectReason}</span>
+                </p>
+              )}
+              <div className="mm-modal-actions">
+                <button className="hs-btn-ghost" onClick={() => handleLike(activeMoment)} disabled={likingId === keyOf(activeMoment) || likedIds.has(keyOf(activeMoment))}>
+                  <Heart size={12} fill={likedIds.has(keyOf(activeMoment)) ? "currentColor" : "none"} /> {likedIds.has(keyOf(activeMoment)) ? "Salvo" : "Salvar"}
+                </button>
+                <button className="hs-btn-ghost" onClick={() => handleDownload(activeMoment)} disabled={downloadingId === keyOf(activeMoment)}>
+                  {downloadingId === keyOf(activeMoment) ? (
+                    <>
+                      <Loader2 size={12} className="tr-spin" /> Baixando... {downloadProgress[keyOf(activeMoment)] ?? 0}%
+                    </>
+                  ) : (
+                    <>
+                      <Download size={12} /> Baixar corte
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
+          {playlist.length > 1 && (
+            <div className="mm-modal-nav">
+              <button type="button" className="hs-btn-ghost" onClick={() => goTo(-1)} disabled={playIndex <= 0}>
+                <ChevronLeft size={14} /> Anterior
+              </button>
+              <span>{playIndex + 1} de {playlist.length}</span>
+              <button type="button" className="hs-btn-ghost" onClick={() => goTo(1)} disabled={playIndex >= playlist.length - 1}>
+                Próximo <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </section>
+        </div>
       )}
 
-      {/* Inline publish panel */}
+      {/* Publish: also a window over the list */}
       {publishTarget && (
-        <section className="tr-card tr-fade">
+        <div className="mm-modal-overlay" onClick={() => setPublishTarget(null)}>
+        <section className="tr-card mm-modal mm-modal-narrow" role="dialog" aria-modal="true" aria-label="Publicar" onClick={(e) => e.stopPropagation()}>
           <div className="tr-card-head">
             <Send size={18} className="tr-icon-lime" />
             <h2>Publicar</h2>
@@ -731,6 +798,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
             </button>
           </div>
         </section>
+        </div>
       )}
 
       {/* Results */}

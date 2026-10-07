@@ -4089,3 +4089,16 @@ select.pb-input option { background: #0F140F; color: var(--text-main); }
 .mm-card-other { border-style: dashed; }
 .mm-reject { display: flex; align-items: flex-start; gap: 7px; padding: 8px 10px; border-radius: 10px; background: rgba(255,200,87,.07); color: #e8c982; line-height: 1.4; }
 .mm-reject svg { flex: none; margin-top: 2px; }
+
+/* ===== Melhores Momentos: janela do player ===== */
+.mm-modal-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.74); backdrop-filter: blur(6px); animation: tp-fade .15s ease; }
+.mm-modal { width: 100%; max-width: 940px; max-height: calc(100vh - 40px); overflow-y: auto; margin: 0; box-shadow: 0 30px 90px -20px rgba(0,0,0,.9); }
+.mm-modal-narrow { max-width: 520px; }
+.mm-modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.mm-modal-actions .hs-btn-ghost { flex: none; }
+.mm-modal-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px 16px; border-top: 1px solid var(--border-soft); font-size: .78rem; color: var(--text-muted); }
+.mm-modal-nav .hs-btn-ghost { flex: none; }
+@media (max-width: 640px) {
+  .mm-modal-overlay { padding: 8px; align-items: flex-end; }
+  .mm-modal { max-height: calc(100vh - 16px); }
+}
