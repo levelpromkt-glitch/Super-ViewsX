@@ -196,7 +196,9 @@ function MelhoresMomentosPage() {
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
   // Kept after a successful analysis so the moments can be re-run (another
   // length, or a fresh attempt) without uploading/transcribing again.
-  const [analysis, setAnalysis] = useState<{ key: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[]; words?: [string, number, number][] } | null>(null);
+  // `sig` identifies the source (picked file or YouTube id) so "Analisar" can tell
+  // that the same video is being analysed again and skip upload + transcription.
+  const [analysis, setAnalysis] = useState<{ key: string; sig: string; lines: TranscriptLine[]; audioSignals?: AudioSignal[]; words?: [string, number, number][] } | null>(null);
   const [clipPreviewUrl, setClipPreviewUrl] = useState<string | null>(null);
   const [clipPreviewLoading, setClipPreviewLoading] = useState(false);
   const [clipPreviewError, setClipPreviewError] = useState<string | null>(null);
@@ -287,8 +289,12 @@ function MelhoresMomentosPage() {
       return;
     }
 
+    // Same video as the last analysis: reuse its transcript, only the moment search runs again.
+    const sig = `yt:${id}`;
+    const reuse = analysis && analysis.sig === sig ? analysis : null;
+
     setUrlError(null);
-    setAnalysis(null);
+    if (!reuse) setAnalysis(null);
     setVideoId(id);
     setStoragePath(null);
     setMoments(null);
@@ -300,13 +306,13 @@ function MelhoresMomentosPage() {
     setSelectedTitle({});
     setUseHook({});
     setLoading(true);
-    setLoadingStatus("Transcrevendo o vídeo...");
+    setLoadingStatus(reuse ? "Analisando os melhores momentos com IA..." : "Transcrevendo o vídeo...");
 
     try {
-      const transcript = await TranscriptService.getTranscript(id);
+      const lines = reuse ? reuse.lines : (await TranscriptService.getTranscript(id)).lines;
       setLoadingStatus("Analisando os melhores momentos com IA...");
-      setAnalysis({ key: id, lines: transcript.lines });
-      const result = await runMomentSearch(id, transcript.lines, undefined, undefined, false);
+      if (!reuse) setAnalysis({ key: id, sig, lines });
+      const result = await runMomentSearch(id, lines, undefined, undefined, false);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
     } catch (error: any) {
@@ -334,10 +340,16 @@ function MelhoresMomentosPage() {
       return;
     }
 
+    // Same file and no pasted transcript: the video is already in R2 and transcribed,
+    // so only the moment search runs again (e.g. after changing the clip length).
+    const sig = `up:${uploadFile.name}:${uploadFile.size}:${uploadFile.lastModified}`;
+    const manualLines = parsePastedTranscript(pastedTranscript);
+    const reuse = analysis && analysis.sig === sig && manualLines.length === 0 ? analysis : null;
+
     setUrlError(null);
-    setAnalysis(null);
+    if (!reuse) setAnalysis(null);
     setVideoId(null);
-    setStoragePath(null);
+    setStoragePath(reuse ? reuse.key : null);
     setMoments(null);
     setVideoTopic(null);
     setActiveMoment(null);
@@ -348,17 +360,20 @@ function MelhoresMomentosPage() {
     setUseHook({});
     setMomentThumbnails({});
     setLoading(true);
-    setLoadingStatus("Enviando vídeo...");
+    setLoadingStatus(reuse ? "Analisando os melhores momentos com IA..." : "Enviando vídeo...");
 
     try {
-      const key = await ViralMomentsService.uploadSourceVideoToR2(uploadFile);
+      const key = reuse ? reuse.key : await ViralMomentsService.uploadSourceVideoToR2(uploadFile);
       setStoragePath(key);
 
-      const manualLines = parsePastedTranscript(pastedTranscript);
       let lines: TranscriptLine[];
       let audioSignals: AudioSignal[] | undefined;
       let words: [string, number, number][] | undefined;
-      if (manualLines.length > 0) {
+      if (reuse) {
+        lines = reuse.lines;
+        audioSignals = reuse.audioSignals;
+        words = reuse.words;
+      } else if (manualLines.length > 0) {
         lines = manualLines;
       } else {
         setLoadingStatus("Na fila de transcrição...");
@@ -376,7 +391,7 @@ function MelhoresMomentosPage() {
         words = transcript.words;
       }
 
-      setAnalysis({ key, lines, audioSignals, words });
+      if (!reuse) setAnalysis({ key, sig, lines, audioSignals, words });
       const result = await runMomentSearch(key, lines, audioSignals, words, false);
       setMoments(result.moments);
       setVideoTopic(result.videoTopic || null);
