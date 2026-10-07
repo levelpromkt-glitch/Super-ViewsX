@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
 import {
   Anchor,
@@ -54,6 +55,14 @@ import {
 } from "./momentUtils";
 
 const PAGE_SIZES = [12, 24, 48];
+
+// Windows are drawn straight into <body>: inside the dashboard they would sit in the content
+// area's own stacking layer and end up underneath the fixed side menu.
+function BodyPortal({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? createPortal(children, document.body) : null;
+}
 
 type StepState = "done" | "active" | "pending";
 
@@ -703,6 +712,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
 
       {/* Player: a window over the list, so the page keeps its place */}
       {activeMoment && !publishTarget && (
+        <BodyPortal>
         <div className="mm-modal-overlay" onClick={handleCloseMoment}>
         <section className="tr-card mm-modal" role="dialog" aria-modal="true" aria-label="Assistir corte" onClick={(e) => e.stopPropagation()}>
           <div className="tr-card-head">
@@ -779,10 +789,12 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
           )}
         </section>
         </div>
+        </BodyPortal>
       )}
 
       {/* Publish: also a window over the list */}
       {publishTarget && (
+        <BodyPortal>
         <div className="mm-modal-overlay" onClick={() => setPublishTarget(null)}>
         <section className="tr-card mm-modal mm-modal-narrow" role="dialog" aria-modal="true" aria-label="Publicar" onClick={(e) => e.stopPropagation()}>
           <div className="tr-card-head">
@@ -833,6 +845,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
           </div>
         </section>
         </div>
+        </BodyPortal>
       )}
 
       {/* Results */}
