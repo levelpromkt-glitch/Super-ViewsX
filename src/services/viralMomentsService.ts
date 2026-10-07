@@ -158,10 +158,12 @@ export const ViralMomentsService = {
     duration: DurationPreset,
     audioSignals?: AudioSignal[],
     refresh = false,
-    words?: [string, number, number][]
+    words?: [string, number, number][],
+    // Passages the creator already has cuts of: the AI must look for other moments.
+    exclude?: { start: number; end: number }[]
   ): Promise<FindBestMomentsResult> {
     const { data, error } = await supabase.functions.invoke("viral-moments", {
-      body: { videoId, title, lines, duration, audioSignals, refresh, words },
+      body: { videoId, title, lines, duration, audioSignals, refresh, words, exclude },
     });
 
     if (error) {

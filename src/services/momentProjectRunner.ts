@@ -9,6 +9,7 @@ import {
 import {
   MomentProjectsService,
   type MomentProject,
+  type MomentRun,
   type ProjectStage,
   type ProjectTranscript,
   type StoredMoment,
@@ -32,6 +33,8 @@ export type RunnerState = {
   percent: number | null;
   status: string;
   error?: string;
+  // Shown once a round finishes without adding cuts (e.g. nothing new left in the video).
+  notice?: string;
   // "initial": first pass of a new project. "extra": another duration on a finished project.
   kind: "initial" | "extra";
 };
@@ -57,7 +60,7 @@ const emitData = () => {
 
 const setState = (projectId: string, patch: Partial<RunnerState> & { stage: ProjectStage }) => {
   const prev = states.get(projectId);
-  states.set(projectId, { percent: null, status: "", kind: "initial", ...prev, ...patch });
+  states.set(projectId, { percent: null, status: "", kind: "initial", ...prev, notice: undefined, ...patch });
   if (!prev || prev.stage !== patch.stage || (patch.kind && prev.kind !== patch.kind)) dataVersion += 1;
   emit();
 };
@@ -96,6 +99,7 @@ async function searchMoments(
   transcript: ProjectTranscript,
   duration: DurationPreset,
   refresh: boolean,
+  exclude: { start: number; end: number }[],
   onStatus: (status: string) => void
 ): Promise<{ moments: ViralMoment[]; videoTopic?: string }> {
   onStatus("Analisando os melhores momentos com IA...");
@@ -106,14 +110,16 @@ async function searchMoments(
     duration,
     transcript.audioSignals,
     refresh,
-    transcript.words
+    transcript.words,
+    exclude
   );
   const withoutSlices = (list: ViralMoment[]) => list.map(({ slice: _slice, ...rest }) => rest as ViralMoment);
   if (first.moments.length === 0) return { moments: [], videoTopic: first.videoTopic };
 
   onStatus("Refinando os cortes com uma segunda IA (só os mais virais passam)...");
   try {
-    const judged = await ViralMomentsService.judgeMoments(key, duration, first.videoTopic, first.moments, refresh);
+    // The judge caches by candidate count, so a round with different candidates must skip that cache.
+    const judged = await ViralMomentsService.judgeMoments(key, duration, first.videoTopic, first.moments, refresh || exclude.length > 0);
     return { moments: withoutSlices(judged), videoTopic: first.videoTopic };
   } catch (error) {
     console.error("Segunda passada falhou, mantendo a primeira", error);
@@ -126,7 +132,14 @@ async function analyze(
   project: Pick<MomentProject, "id" | "source_type" | "source_key">,
   transcript: ProjectTranscript,
   duration: DurationPreset,
-  opts: { kind: "initial" | "extra"; refresh: boolean; file?: File }
+  opts: {
+    kind: "initial" | "extra";
+    refresh: boolean;
+    file?: File;
+    // An earlier round with this same duration: the new one looks for OTHER moments
+    // and its cuts are added to that round instead of repeating it.
+    existing?: MomentRun | null;
+  }
 ) {
   const { id } = project;
   const searchKey = project.source_key;
@@ -135,27 +148,56 @@ async function analyze(
   }
   setState(id, { stage: "finding", percent: null, status: "Analisando os melhores momentos com IA...", kind: opts.kind });
 
-  const result = await searchMoments(searchKey, transcript, duration, opts.refresh, (status) =>
+  const exclude = (opts.existing?.moments ?? []).map((m) => ({ start: m.start, end: m.end }));
+  const result = await searchMoments(searchKey, transcript, duration, opts.refresh, exclude, (status) =>
     setState(id, { stage: "finding", percent: null, status, kind: opts.kind })
   );
 
-  const run = await MomentProjectsService.addRun(id, duration, result.moments as StoredMoment[], result.videoTopic);
-  await MomentProjectsService.update(id, {
-    stage: "ready",
-    error: null,
-    moments_count: result.moments.length,
-    requested_duration: null,
-  });
+  // Safety net: the AI may still return part of a passage that was already cut.
+  const overlapsExisting = (m: { start: number; end: number }) =>
+    exclude.some((r) => Math.min(m.end, r.end) - Math.max(m.start, r.start) > 0.3 * Math.min(m.end - m.start, r.end - r.start));
+  const fresh = opts.existing ? result.moments.filter((m) => !overlapsExisting(m)) : result.moments;
+
+  let target: MomentRun;
+  let added: StoredMoment[];
+  let total: number;
+
+  if (opts.existing) {
+    if (fresh.length === 0) {
+      setState(id, {
+        stage: "ready",
+        percent: null,
+        status: "",
+        kind: opts.kind,
+        notice: "Não encontramos mais cortes novos nesse vídeo com essa duração. Tente outra duração em \"Nova análise\".",
+      });
+      return;
+    }
+    // New ids continue after the existing ones so the cards never collide.
+    let next = opts.existing.moments.reduce((max, m) => Math.max(max, Number(m.id.replace(/\D/g, "")) || 0), 0);
+    added = fresh.map((m) => ({ ...m, id: `m${++next}` }));
+    const merged = [...opts.existing.moments, ...added].sort((a, b) => b.score - a.score);
+    await MomentProjectsService.updateRunMoments(opts.existing.id, merged);
+    target = { ...opts.existing, moments: merged };
+    total = merged.length;
+  } else {
+    added = result.moments as StoredMoment[];
+    target = await MomentProjectsService.addRun(id, duration, added, result.videoTopic);
+    total = added.length;
+  }
+
+  await MomentProjectsService.update(id, { stage: "ready", error: null, moments_count: total, requested_duration: null });
   setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind });
 
   // Covers for the cards come from the file picked in this session; saved with the run
   // so they are still there when the project is reopened later.
-  if (opts.file && result.moments.length > 0) {
+  if (opts.file && added.length > 0) {
     const videoUrl = URL.createObjectURL(opts.file);
     try {
-      const thumbs = await generateMomentThumbnails(result.moments, videoUrl);
-      const withThumbs = (result.moments as StoredMoment[]).map((m) => ({ ...m, thumb: thumbs[m.id] }));
-      await MomentProjectsService.updateRunMoments(run.id, withThumbs);
+      const thumbs = await generateMomentThumbnails(added, videoUrl);
+      const addedIds = new Set(added.map((m) => m.id));
+      const withThumbs = target.moments.map((m) => (addedIds.has(m.id) ? { ...m, thumb: thumbs[m.id] } : m));
+      await MomentProjectsService.updateRunMoments(target.id, withThumbs);
       emitData();
     } catch (error) {
       console.error("Falha ao gerar capas dos cortes", error);
@@ -334,7 +376,13 @@ export const MomentProjectRunner = {
         MomentProjectsService.getTranscript(projectId),
       ]);
       if (!transcript) throw new ViralMomentsError("A transcrição deste projeto não está disponível. Envie o vídeo de novo.", "NO_TRANSCRIPT");
-      await analyze(project, transcript, duration, { kind: "extra", refresh: opts.refresh ?? false, file: sessionFiles.get(projectId) });
+      const runs = await MomentProjectsService.listRuns(projectId);
+      await analyze(project, transcript, duration, {
+        kind: "extra",
+        refresh: opts.refresh ?? false,
+        file: sessionFiles.get(projectId),
+        existing: runs.find((r) => r.duration === duration) ?? null,
+      });
     } catch (error) {
       await fail(projectId, error, "extra");
     } finally {

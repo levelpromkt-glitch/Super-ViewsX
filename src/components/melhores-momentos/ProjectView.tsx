@@ -273,8 +273,8 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
 
   const handleNewRun = (duration: DurationPreset) => {
     setNewRunOpen(false);
-    const again = runs.some((r) => r.duration === duration);
-    void MomentProjectRunner.startRun(projectId, duration, { refresh: again });
+    // Same duration as an existing round: it looks for other moments and adds them to it.
+    void MomentProjectRunner.startRun(projectId, duration);
   };
 
   // ------------------------------------------------------------------ render
@@ -364,6 +364,15 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
       {runner?.kind === "extra" && runner.stage === "failed" && (
         <div className="mm-banner-error">
           <TriangleAlert size={14} /> {runner.error}
+          <button type="button" className="hs-btn-ghost" onClick={() => clearRunnerState(projectId)}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {runner?.notice && (
+        <div className="mm-banner-notice">
+          <Sparkles size={14} /> {runner.notice}
           <button type="button" className="hs-btn-ghost" onClick={() => clearRunnerState(projectId)}>
             <X size={12} />
           </button>
@@ -471,7 +480,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                   {DURATIONS.map((d) => (
                     <button key={d.id} type="button" role="option" aria-selected={false} className="hs-period-item" onClick={() => handleNewRun(d.id)}>
                       {d.label}
-                      {runs.some((r) => r.duration === d.id) ? " · refazer" : ""}
+                      {runs.some((r) => r.duration === d.id) ? " · achar mais cortes" : ""}
                     </button>
                   ))}
                 </div>

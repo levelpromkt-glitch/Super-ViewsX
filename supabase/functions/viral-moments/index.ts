@@ -23,6 +23,7 @@ const DEFAULT_DURATION: [number, number] = [10, 90];
 // Hard floor regardless of preset: shorter than this isn't a usable clip anywhere.
 const MIN_CLIP_SECONDS = 10;
 
+type Range = { start: number; end: number };
 type TranscriptLine = { time: string; seconds: number; text: string; start: number; duration: number };
 type AudioSignal = { time: number; type: "energy_peak" | "interruption"; detail?: string };
 
@@ -134,7 +135,8 @@ const buildPrompt = (
   title: string,
   sentences: Sentence[],
   duration: [number, number],
-  audioSignals?: AudioSignal[]
+  audioSignals?: AudioSignal[],
+  exclude: Range[] = []
 ) => {
   const transcriptText = sentences
     .slice(0, MAX_SENTENCES)
@@ -156,6 +158,19 @@ const buildPrompt = (
           return `[${Math.floor(s.time)}] ${label}`;
         })
         .join("\n")
+    : "";
+
+  // Passages the creator already has cuts of: the model must look elsewhere. Without this a
+  // repeated analysis sends the very same prompt and gets the very same moments back.
+  const excludeText = exclude.length > 0
+    ? `
+
+## Trechos JÁ ENCONTRADOS — NÃO REPITA
+
+O criador já tem cortes destes intervalos (em segundos). Procure OUTROS momentos do vídeo: não devolva nenhum candidato que se sobreponha, nem em parte, a um destes intervalos. Se o vídeo não tiver mais nenhum momento genuinamente forte fora deles, devolva uma lista curta ou vazia — nunca repita um trecho para completar.
+
+` +
+      exclude.map((r) => `${Math.round(r.start)}-${Math.round(r.end)}`).join(", ")
     : "";
 
   return `Você é o triador editorial de um pipeline profissional de cortes virais para Shorts, Reels e TikTok. O criador que vai receber esses cortes vive de volume: participa de competições de clipagem (minutagem mínima ${MIN_CLIP_SECONDS}s), posta em TikTok, Instagram e YouTube, e precisa do maior número possível de oportunidades genuinamente fortes desse vídeo — não só a melhor. Sua função não é "achar 1 trecho perfeito" — é vasculhar o vídeo inteiro e devolver TODOS os trechos que passem no teste de admissão abaixo.
@@ -247,7 +262,7 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 
 Transcrição (formato [segundo] texto):
 ${transcriptText}
-${audioSignalsText}
+${audioSignalsText}${excludeText}
 
 Chame a tool "return_moments" com o resultado. Não responda em texto — use apenas a tool.`;
 };
@@ -266,6 +281,12 @@ serve(async (req) => {
     const duration = DURATION_PRESETS[durationKey] || DEFAULT_DURATION;
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
     const refresh: boolean = body?.refresh === true;
+    const exclude: Range[] = Array.isArray(body?.exclude)
+      ? body.exclude
+          .filter((r: any) => r && Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start)
+          .slice(0, 120)
+          .map((r: any) => ({ start: Number(r.start), end: Number(r.end) }))
+      : [];
     const words: WordTiming[] | undefined = Array.isArray(body?.words) ? body.words : undefined;
 
     if (!videoId || typeof videoId !== 'string') {
@@ -281,7 +302,7 @@ serve(async (req) => {
       );
     }
 
-    const cacheSeed = `viral-moments-v15-${videoId}-${duration[0]}-${duration[1]}`;
+    const cacheSeed = `viral-moments-v16-${videoId}-${duration[0]}-${duration[1]}-x${exclude.map((r) => `${Math.round(r.start)}_${Math.round(r.end)}`).join(',')}`;
 
     const cached = refresh ? null : await getCache(cacheSeed);
     if (cached) {
@@ -301,7 +322,7 @@ serve(async (req) => {
 
     const startTime = Date.now();
     const sentences = buildSentences(lines, words);
-    const prompt = buildPrompt(title, sentences, duration, audioSignals);
+    const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude);
     console.log('SENTENCES', sentences.length, 'lines', lines.length, 'words', words ? words.length : 0);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -455,6 +476,8 @@ serve(async (req) => {
       // anything that becomes invalid (or falls under the competition's
       // minimum clip length) after clamping.
       .filter((m) => m.end - m.start >= MIN_CLIP_SECONDS && m.end - m.start <= maxMomentSec + 15)
+      // The model can still overlap an excluded passage: drop it if more than 30% is shared.
+      .filter((m) => !exclude.some((r) => Math.min(m.end, r.end) - Math.max(m.start, r.start) > 0.3 * Math.min(m.end - m.start, r.end - r.start)))
       .sort((a, b) => b.score - a.score);
 
     console.log('FINAL moments', moments.length);

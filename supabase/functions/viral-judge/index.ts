@@ -245,7 +245,7 @@ serve(async (req) => {
     let failedBatches = 0;
     batchResults.forEach((r) => (r ? judged.push(...r) : failedBatches++));
     if (judged.length === 0) {
-      return json({ success: false, code: 'JUDGE_FAILED', message: 'Não foi possível refinar os cortes.' }, 502);
+      return json({ success: false, code: 'JUDGE_FAILED', message: 'Não foi possível refinar os cortes.', modelErrors }, 502);
     }
     console.log('JUDGE', 'candidates', candidates.length, 'judged', judged.length, 'kept', judged.filter((j) => j?.keep === true).length, 'failedBatches', failedBatches);
 
