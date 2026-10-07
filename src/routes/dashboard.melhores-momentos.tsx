@@ -31,7 +31,7 @@ import { ClipDownloadService, ClipDownloadError, ClipSource } from "@/services/c
 import { SocialAccountsService, SocialAccountsError, ConnectedAccount } from "@/services/socialAccountsService";
 import { MAX_SOURCE_VIDEO_BYTES } from "@/services/postsService";
 import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
-import { VideoPicker } from "@/components/melhores-momentos/VideoPicker";
+import { VideoPicker, SourceProgress } from "@/components/melhores-momentos/VideoPicker";
 
 const DURATIONS: { id: DurationPreset; label: string }[] = [
   { id: "10-30", label: "10s a 30s (competição)" },
@@ -191,6 +191,8 @@ function MelhoresMomentosPage() {
 
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
+  // Real percentage of the file being sent to storage; null outside the upload step.
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [moments, setMoments] = useState<ViralMoment[] | null>(null);
   const [videoTopic, setVideoTopic] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<ViralMoment | null>(null);
@@ -363,7 +365,14 @@ function MelhoresMomentosPage() {
     setLoadingStatus(reuse ? "Analisando os melhores momentos com IA..." : "Enviando vídeo...");
 
     try {
-      const key = reuse ? reuse.key : await ViralMomentsService.uploadSourceVideoToR2(uploadFile);
+      let key: string;
+      if (reuse) {
+        key = reuse.key;
+      } else {
+        setUploadPercent(0);
+        key = await ViralMomentsService.uploadSourceVideoToR2(uploadFile, setUploadPercent);
+        setUploadPercent(null);
+      }
       setStoragePath(key);
 
       let lines: TranscriptLine[];
@@ -411,6 +420,7 @@ function MelhoresMomentosPage() {
     } finally {
       setLoading(false);
       setLoadingStatus("");
+      setUploadPercent(null);
     }
   };
 
@@ -590,9 +600,9 @@ function MelhoresMomentosPage() {
 
   return (
     <div className="hs-page">
-      {/* Input card */}
+      {/* Hero: link or file, then the length of the cuts */}
       <section
-        className={`tr-card tr-input-card${isDraggingFile ? " tr-dropzone-active" : ""}`}
+        className={`mm-hero${isDraggingFile ? " tr-dropzone-active" : ""}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -603,75 +613,31 @@ function MelhoresMomentosPage() {
             <Upload size={18} /> Solte o vídeo aqui
           </div>
         )}
-        <div className="tr-input-lead">
-          <div className="tr-input-badge">
-            <Link2 size={16} className="tr-icon-lime" />
-            <span>Melhores Momentos</span>
-          </div>
-          <h2 className="tr-input-title">
-            {sourceMode === "youtube" ? "Cole o link do YouTube" : "Envie um vídeo do seu computador"}
-          </h2>
-          <p className="tr-input-hint">
-            {sourceMode === "youtube"
-              ? "Nossa IA analisa a transcrição do vídeo e aponta os trechos com maior potencial viral para cortar em Shorts, Reels e TikTok."
-              : "Sem passar pelo YouTube: a IA transcreve o áudio e corta direto do arquivo enviado, sem risco de bloqueio."}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            className="hs-btn-ghost"
-            style={{
-              flex: "none",
-              borderColor: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
-              color: sourceMode === "youtube" ? "var(--primary-lime)" : undefined,
+        <h1 className="mm-hero-title">Cole o link. A IA acha os cortes virais.</h1>
+        <p className="mm-hero-sub">
+          Cole um link do YouTube ou envie o vídeo do seu computador. A gente transcreve, procura os trechos com maior potencial e entrega os cortes prontos.
+        </p>
+
+        <div className="mm-pill" data-disabled={sourceMode === "upload" || loading}>
+          <Link2 size={18} className="mm-pill-icon" />
+          <input
+            className="mm-pill-input"
+            type="url"
+            placeholder={sourceMode === "upload" ? "Vídeo do computador selecionado" : "Cole um link do YouTube"}
+            value={url}
+            disabled={sourceMode === "upload" || loading}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              if (urlError) setUrlError(null);
             }}
-            onClick={() => { setSourceMode("youtube"); setUrlError(null); setUploadFile(null); setPastedTranscript(""); }}
-          >
-            <Link2 size={12} /> Colar link
-          </button>
-          <button
-            type="button"
-            className="hs-btn-ghost"
-            style={{
-              flex: "none",
-              borderColor: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
-              color: sourceMode === "upload" ? "var(--primary-lime)" : undefined,
-            }}
-            onClick={() => { setSourceMode("upload"); setUrlError(null); setUrl(""); }}
-          >
-            <Upload size={12} /> Enviar vídeo
-          </button>
-        </div>
-        <div className="tr-url-row">
-          {sourceMode === "youtube" ? (
-            <input
-              className="tr-input"
-              type="url"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                if (urlError) setUrlError(null);
-              }}
-              onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
-            />
-          ) : (
-            <VideoPicker
-              file={uploadFile}
-              onPick={(f) => {
-                setUploadFile(f);
-                setUrlError(null);
-              }}
-              onRemove={() => setUploadFile(null)}
-              hint={`Até ${Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB — ou arraste e solte o arquivo em qualquer lugar desta área.`}
-            />
-          )}
+            onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
+          />
           <div className="hs-period" ref={durationRef}>
             <button
               type="button"
               className="hs-period-btn"
               data-open={durationOpen}
+              disabled={loading}
               onClick={() => setDurationOpen((o) => !o)}
               aria-haspopup="listbox"
               aria-expanded={durationOpen}
@@ -700,10 +666,14 @@ function MelhoresMomentosPage() {
               </div>
             )}
           </div>
-          <button className="btn-primary tr-btn-main" onClick={handleAnalyze} disabled={loading}>
+          <button
+            className="btn-primary mm-pill-btn"
+            onClick={handleAnalyze}
+            disabled={loading || (sourceMode === "youtube" ? !url.trim() : !uploadFile)}
+          >
             {loading ? (
               <>
-                <Loader2 size={16} className="tr-spin" /> Analisando...
+                <Loader2 size={16} className="tr-spin" /> Analisando
               </>
             ) : (
               <>
@@ -712,10 +682,36 @@ function MelhoresMomentosPage() {
             )}
           </button>
         </div>
-        {sourceMode === "upload" && (
-          <div className="tr-field">
-            <label className="hs-label">Já tem a transcrição com timestamp? (opcional)</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+
+        {/* Below the pill: dropzone -> chosen-file card -> progress while working */}
+        {sourceMode === "upload" || (!url.trim() && !loading) ? (
+          <VideoPicker
+            file={uploadFile}
+            onPick={(f) => {
+              setSourceMode("upload");
+              setUrl("");
+              setUploadFile(f);
+              setUrlError(null);
+            }}
+            onRemove={() => {
+              setSourceMode("youtube");
+              setUploadFile(null);
+              setPastedTranscript("");
+            }}
+            disabled={loading}
+            progress={loading ? { status: uploadPercent !== null ? "Enviando o vídeo..." : loadingStatus || "Processando...", percent: uploadPercent } : null}
+            hint={`MP4, MOV, WEBM, MKV ou AVI. Máximo ${Math.round(MAX_SOURCE_VIDEO_BYTES / (1024 * 1024 * 1024))}GB`}
+          />
+        ) : loading ? (
+          <div className="mm-picker">
+            <SourceProgress title={url.trim()} status={loadingStatus || "Processando..."} percent={null} />
+          </div>
+        ) : null}
+
+        {sourceMode === "upload" && !loading && (
+          <details className="mm-transcript">
+            <summary>Já tem a transcrição com timestamp? (opcional)</summary>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 6px" }}>
               <input
                 type="file"
                 accept=".txt,text/plain"
@@ -750,21 +746,13 @@ function MelhoresMomentosPage() {
                 ? "Vamos usar essa transcrição e pular a transcrição automática."
                 : "Deixe em branco para transcrever automaticamente."}
             </span>
-          </div>
+          </details>
         )}
-        {urlError && <div className="tr-error">{urlError}</div>}
-        <p className="hs-disclaimer">
-          Use esta ferramenta como fonte de inspiração. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
+        {urlError && <div className="tr-error mm-error">{urlError}</div>}
+        <p className="mm-foot">
+          Use apenas vídeos que você criou ou tem permissão para usar. Evite copiar conteúdos de outros criadores e respeite as diretrizes das plataformas.
         </p>
       </section>
-
-      {/* Loading */}
-      {loading && (
-        <div className="hs-loading">
-          <div className="hs-loader-bar"><span /></div>
-          <p>{loadingStatus || "Processando..."}</p>
-        </div>
-      )}
 
       {/* Inline player for the selected moment */}
       {activeMoment && (

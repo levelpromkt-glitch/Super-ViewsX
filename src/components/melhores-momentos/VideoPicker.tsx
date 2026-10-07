@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Film, Upload, X } from "lucide-react";
+import { CheckCircle2, Film, Loader2, Upload, X } from "lucide-react";
 
 function formatSize(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
@@ -73,16 +73,52 @@ function useVideoInfo(file: File | null) {
   return info;
 }
 
+// Progress card shown while a source is being processed: the file name (or link),
+// what is happening right now and a bar. `percent` null = no real percentage
+// (transcription/analysis have no measurable progress), so the bar just animates.
+export function SourceProgress({
+  title,
+  status,
+  percent,
+  thumbnail,
+}: {
+  title: string;
+  status: string;
+  percent: number | null;
+  thumbnail?: string | null;
+}) {
+  return (
+    <div className="mm-progress" role="status" aria-live="polite">
+      <div className="mm-progress-top">
+        {thumbnail ? <img className="mm-progress-thumb" src={thumbnail} alt="" /> : <Loader2 size={18} className="tr-spin mm-progress-spin" />}
+        <span className="mm-progress-title" title={title}>
+          {title}
+        </span>
+        {percent !== null && <span className="mm-progress-pct">{percent}%</span>}
+      </div>
+      <div className="mm-progress-bar" data-indeterminate={percent === null}>
+        <span style={percent !== null ? { width: `${percent}%` } : undefined} />
+      </div>
+      <span className="mm-progress-status">{status}</span>
+    </div>
+  );
+}
+
 export function VideoPicker({
   file,
   onPick,
   onRemove,
   hint,
+  disabled,
+  progress,
 }: {
   file: File | null;
   onPick: (file: File) => void;
   onRemove: () => void;
-  hint: string;
+  hint?: string;
+  disabled?: boolean;
+  // While set, the picked file is being processed: show the progress card instead of the actions.
+  progress?: { status: string; percent: number | null } | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { thumbnail, duration } = useVideoInfo(file);
@@ -102,16 +138,15 @@ export function VideoPicker({
       />
 
       {!file ? (
-        <>
-          <button type="button" className="mm-pick-empty" onClick={() => inputRef.current?.click()}>
-            <Upload size={18} className="tr-icon-lime" />
-            <span>
-              <strong>Escolher vídeo</strong>
-              <span className="mm-muted"> do seu computador</span>
-            </span>
-          </button>
-          <span className="mm-hint">{hint}</span>
-        </>
+        <button type="button" className="mm-pick-empty" disabled={disabled} onClick={() => inputRef.current?.click()}>
+          <Upload size={20} className="mm-pick-icon" />
+          <span className="mm-pick-text">
+            <strong>Clique ou arraste um arquivo</strong>
+            <span className="mm-muted">{hint}</span>
+          </span>
+        </button>
+      ) : progress ? (
+        <SourceProgress title={file.name} status={progress.status} percent={progress.percent} thumbnail={thumbnail} />
       ) : (
         <div className="mm-file-card">
           <div className="mm-file-thumb">
