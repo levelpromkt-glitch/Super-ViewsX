@@ -40,7 +40,7 @@ import {
 import type { DurationPreset } from "@/services/viralMomentsService";
 import { ClipDownloadService, ClipDownloadError, type ClipSource } from "@/services/clipDownloadService";
 import { SocialAccountsService, SocialAccountsError, type ConnectedAccount } from "@/services/socialAccountsService";
-import { SavedClipsService, SavedClipsError } from "@/services/savedClipsService";
+import { SavedClipsService, SavedClipsError, type SavedClip } from "@/services/savedClipsService";
 import {
   DURATIONS,
   PROFILE_LABELS,
@@ -177,8 +177,29 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [likingId, setLikingId] = useState<string | null>(null);
+  // What is already in the library comes from the database, so the "Salvo" marks survive a reload.
+  const [savedClips, setSavedClips] = useState<SavedClip[]>([]);
+  useEffect(() => {
+    SavedClipsService.list()
+      .then(setSavedClips)
+      .catch(() => {});
+  }, []);
+  const sameSource = (c: SavedClip) =>
+    !!clipSource &&
+    ("videoId" in clipSource
+      ? "videoId" in c.source && c.source.videoId === clipSource.videoId
+      : "r2Key" in c.source && c.source.r2Key === clipSource.r2Key);
+  // A moment counts as saved when a library clip of this video has the same end and the same start
+  // (either the natural opening or the hook opening).
+  const savedClipFor = (m: StoredMoment) =>
+    savedClips.find(
+      (c) =>
+        sameSource(c) &&
+        Math.abs(Number(c.end_sec) - m.end) < 0.6 &&
+        (Math.abs(Number(c.start_sec) - m.start) < 0.6 || (m.hookStart !== undefined && Math.abs(Number(c.start_sec) - m.hookStart) < 0.6))
+    );
+  const isLiked = (m: StoredMoment) => !!savedClipFor(m);
 
   const handleDownload = async (m: StoredMoment) => {
     if (!clipSource) return;
@@ -203,20 +224,32 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
     }
   };
 
+  // Click again on a saved cut to take it out of the library.
   const handleLike = async (m: StoredMoment) => {
-    if (!clipSource || likedIds.has(keyOf(m))) return;
+    if (!clipSource) return;
+    const existing = savedClipFor(m);
     setLikingId(keyOf(m));
     try {
-      await SavedClipsService.save({
-        source: clipSource,
-        start: getEffectiveStart(m),
-        end: m.end,
-        title: getEffectiveTitle(m),
-        profile: m.profile,
-        score: m.score,
-        thumbnail: m.thumb || null,
-      });
-      setLikedIds((prev) => new Set(prev).add(keyOf(m)));
+      if (existing) {
+        await SavedClipsService.remove(existing.id);
+        setSavedClips((prev) => prev.filter((c) => c.id !== existing.id));
+      } else {
+        const start = getEffectiveStart(m);
+        const title = getEffectiveTitle(m);
+        const id = await SavedClipsService.save({
+          source: clipSource,
+          start,
+          end: m.end,
+          title,
+          profile: m.profile,
+          score: m.score,
+          thumbnail: m.thumb || null,
+        });
+        setSavedClips((prev) => [
+          { id, source: clipSource, start_sec: start, end_sec: m.end, title, profile: m.profile ?? null, score: m.score, thumbnail: m.thumb || null, created_at: new Date().toISOString() },
+          ...prev,
+        ]);
+      }
     } catch (error) {
       setDownloadError(error instanceof SavedClipsError ? error.message : "Erro ao salvar na biblioteca.");
     } finally {
@@ -441,11 +474,12 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                         <button
                           className="hs-btn-ghost"
                           onClick={() => handleLike(m)}
-                          disabled={likingId === k || likedIds.has(k)}
-                          style={likedIds.has(k) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
+                          disabled={likingId === k}
+                          title={isLiked(m) ? "Clique para remover da biblioteca" : "Salvar na biblioteca"}
+                          style={isLiked(m) ? { color: "var(--primary-lime)", borderColor: "var(--primary-lime)" } : undefined}
                         >
-                          {likingId === k ? <Loader2 size={12} className="tr-spin" /> : <Heart size={12} fill={likedIds.has(k) ? "currentColor" : "none"} />}
-                          {likedIds.has(k) ? "Salvo" : "Salvar"}
+                          {likingId === k ? <Loader2 size={12} className="tr-spin" /> : <Heart size={12} fill={isLiked(m) ? "currentColor" : "none"} />}
+                          {isLiked(m) ? "Salvo" : "Salvar"}
                         </button>
                         <button className="hs-btn-ghost" onClick={() => handleDownload(m)} disabled={downloadingId === k}>
                           {downloadingId === k ? (
@@ -715,8 +749,8 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                 </p>
               )}
               <div className="mm-modal-actions">
-                <button className="hs-btn-ghost" onClick={() => handleLike(activeMoment)} disabled={likingId === keyOf(activeMoment) || likedIds.has(keyOf(activeMoment))}>
-                  <Heart size={12} fill={likedIds.has(keyOf(activeMoment)) ? "currentColor" : "none"} /> {likedIds.has(keyOf(activeMoment)) ? "Salvo" : "Salvar"}
+                <button className="hs-btn-ghost" onClick={() => handleLike(activeMoment)} disabled={likingId === keyOf(activeMoment)} title={isLiked(activeMoment) ? "Clique para remover da biblioteca" : "Salvar na biblioteca"}>
+                  <Heart size={12} fill={isLiked(activeMoment) ? "currentColor" : "none"} /> {isLiked(activeMoment) ? "Salvo" : "Salvar"}
                 </button>
                 <button className="hs-btn-ghost" onClick={() => handleDownload(activeMoment)} disabled={downloadingId === keyOf(activeMoment)}>
                   {downloadingId === keyOf(activeMoment) ? (
