@@ -22,6 +22,7 @@ const DURATION_PRESETS: Record<string, [number, number]> = {
   "30-60": [30, 60],
   "60-120": [60, 120],
   "120-180": [120, 180],
+  auto: [10, 120], // the AI picks the length each cut needs
 };
 const DEFAULT_DURATION: [number, number] = [10, 90];
 const VALID_PROFILES = ['fast_answer', 'contrarian', 'money', 'story', 'humor', 'transformation'];
@@ -90,7 +91,7 @@ const parseSlice = (slice: unknown): SliceSentence[] => {
   return out.sort((a, b) => a.start - b.start);
 };
 
-const buildPrompt = (batch: Candidate[], duration: [number, number], videoTopic: string) => {
+const buildPrompt = (batch: Candidate[], duration: [number, number], videoTopic: string, auto = false) => {
   const [minSec, maxSec] = duration;
   const blocks = batch.map((c) => {
     const sentences = parseSlice(c.slice);
@@ -101,7 +102,7 @@ const buildPrompt = (batch: Candidate[], duration: [number, number], videoTopic:
   return `Você é o editor-chefe de uma operação de cortes virais para TikTok, Reels e Shorts. Você é EXIGENTE e cético: o criador já recebeu listas longas de cortes medianos e o que ele precisa agora é só de cortes que realmente podem viralizar. Aprovar um corte fraco custa a ele tempo e alcance; reprovar um corte bom custa quase nada, porque existem outros candidatos.
 
 Assunto do vídeo: ${videoTopic || '(não informado)'}
-Duração desejada de cada corte: entre ${minSec} e ${maxSec} segundos (nunca menos de ${MIN_CLIP_SECONDS}s).
+${auto ? `Duração: AUTOMÁTICA. Não há tamanho-alvo: escolha o menor corte que ainda tenha hook, desenvolvimento e payoff (normalmente 20 a 60s; até ${maxSec}s só se a ideia realmente exigir; nunca menos de ${MIN_CLIP_SECONDS}s). Corte curto e denso vale mais que corte longo com enrolação.` : `Duração desejada de cada corte: entre ${minSec} e ${maxSec} segundos (nunca menos de ${MIN_CLIP_SECONDS}s).`}
 
 Para CADA candidato abaixo, leia a transcrição inteira dele e decida:
 
@@ -193,6 +194,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const videoId: string = body?.videoId;
     const duration = DURATION_PRESETS[body?.duration] || DEFAULT_DURATION;
+    const isAuto = body?.duration === 'auto';
     const videoTopic: string = typeof body?.videoTopic === 'string' ? body.videoTopic : '';
     const refresh = body?.refresh === true;
     const candidates: Candidate[] = Array.isArray(body?.candidates)
@@ -223,7 +225,7 @@ serve(async (req) => {
     let modelUsed = JUDGE_MODELS[0];
     const modelErrors: string[] = [];
     const runBatch = async (batch: Candidate[]) => {
-      const prompt = buildPrompt(batch, duration, videoTopic);
+      const prompt = buildPrompt(batch, duration, videoTopic, isAuto);
       for (const model of JUDGE_MODELS) {
         // One retry when the API is rate limiting or overloaded (many batches run at once).
         for (let attempt = 0; attempt < 2; attempt++) {

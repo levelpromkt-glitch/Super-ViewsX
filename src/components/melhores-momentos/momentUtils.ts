@@ -2,6 +2,7 @@ import type { TranscriptLine } from "@/services/transcript/types";
 import type { DurationPreset, NarrativeProfile, ViralMoment } from "@/services/viralMomentsService";
 
 export const DURATIONS: { id: DurationPreset; label: string }[] = [
+  { id: "auto", label: "Automático (a IA decide)" },
   { id: "10-30", label: "10s a 30s (competição)" },
   { id: "30-60", label: "30s a 1 minuto" },
   { id: "60-120", label: "1 a 2 minutos" },
@@ -9,6 +10,8 @@ export const DURATIONS: { id: DurationPreset; label: string }[] = [
 ];
 
 export const durationLabel = (id: string) => DURATIONS.find((d) => d.id === id)?.label ?? id;
+// Without the parenthesis: "Automático", "10s a 30s"
+export const shortDurationLabel = (id: string) => durationLabel(id).replace(/ \(.*\)$/, "");
 
 export const SCORE_FILTERS: { value: number; label: string }[] = [
   { value: 0, label: "Todos" },

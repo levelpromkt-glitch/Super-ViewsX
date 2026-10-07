@@ -2,7 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { readEdgeFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import type { TranscriptLine } from "./transcript/types";
 
-export type DurationPreset = "10-30" | "30-60" | "60-120" | "120-180";
+// "auto": no target length, the AI picks the size each cut needs.
+export type DurationPreset = "auto" | "10-30" | "30-60" | "60-120" | "120-180";
 
 export type NarrativeProfile = "fast_answer" | "contrarian" | "money" | "story" | "humor" | "transformation";
 

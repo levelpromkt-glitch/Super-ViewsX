@@ -45,7 +45,7 @@ import {
   DURATIONS,
   PROFILE_LABELS,
   SCORE_FILTERS,
-  durationLabel,
+  shortDurationLabel,
   formatDuration,
   formatShortDate,
   formatTime,
@@ -654,7 +654,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                 data-active={activeRun?.id === r.id}
                 onClick={() => setActiveRunId(r.id)}
               >
-                {durationLabel(r.duration).replace(" (competição)", "")} · {r.moments.filter((m) => !m.other).length}
+                {shortDurationLabel(r.duration)} · {r.moments.filter((m) => !m.other).length}
               </button>
             ))}
           </div>

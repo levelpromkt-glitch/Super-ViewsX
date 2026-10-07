@@ -18,6 +18,8 @@ const DURATION_PRESETS: Record<string, [number, number]> = {
   "30-60": [30, 60],
   "60-120": [60, 120],
   "120-180": [120, 180],
+  // "auto": no target length, the AI picks the size each idea needs (see autoText in the prompt).
+  auto: [10, 120],
 };
 const DEFAULT_DURATION: [number, number] = [10, 90];
 // Hard floor regardless of preset: shorter than this isn't a usable clip anywhere.
@@ -137,7 +139,8 @@ const buildPrompt = (
   duration: [number, number],
   audioSignals?: AudioSignal[],
   exclude: Range[] = [],
-  windowed = false
+  windowed = false,
+  auto = false
 ) => {
   const transcriptText = sentences
     .slice(0, MAX_SENTENCES)
@@ -189,6 +192,14 @@ O mesmo vídeo costuma ter vários TIPOS de corte forte. Procure ativamente em c
 - **Revelação**: confissão, bastidor, algo que quase ninguém conta;
 - **Mito derrubado / erro comum**: o que quase todo mundo faz errado.
 Se existe um bom candidato de uma categoria, inclua-o mesmo que o score dele seja menor que o de outra categoria — a variedade faz parte do que o criador precisa. Preencha o campo "profile" de acordo com o tipo do trecho.`;
+
+  const autoText = auto
+    ? `
+
+## Duração automática — VOCÊ decide o tamanho de cada corte
+
+Não existe tamanho-alvo. Cada corte deve ter exatamente o tamanho que a ideia precisa: o menor trecho que ainda tenha hook, desenvolvimento e payoff. Normalmente isso fica entre 20 e 60 segundos; vá até ${maxSec}s só quando a história ou o raciocínio realmente exigir, e nunca abaixo de ${MIN_CLIP_SECONDS}s. Cortes curtos e densos viralizam mais que cortes longos com enrolação. Varie os tamanhos conforme o conteúdo.`
+    : "";
 
   // Long videos are scanned in ~10 minute windows, each by its own call: the model keeps its
   // full attention on a short stretch instead of skimming an hour of text.
@@ -287,7 +298,7 @@ Além do "start" natural (que já respeita hook/desenvolvimento/payoff com conte
 - Não invente trecho que não exista na transcrição só para aumentar a contagem — volume alto vem de vasculhar o vídeo inteiro com atenção, não de baixar o rigor.
 - "start" e "end" são em SEGUNDOS (inteiros). O número entre colchetes no início de cada linha da transcrição JÁ É o segundo exato em que a linha começa no vídeo (ex.: [3786] é 63 min e 6 s). Copie esses números direto em "start" e "end" — NUNCA converta para minutos:segundos nem junte dígitos. Nenhum valor pode passar do último número da transcrição. "end - start" sempre entre ${minSec} e ${maxSec}. Ordene os momentos por score decrescente.
 
-${lensText}${scopeText}
+${lensText}${autoText}${scopeText}
 
 Transcrição (formato [segundo] texto):
 ${transcriptText}
@@ -311,6 +322,7 @@ serve(async (req) => {
     const audioSignals: AudioSignal[] | undefined = Array.isArray(body?.audioSignals) ? body.audioSignals : undefined;
     const refresh: boolean = body?.refresh === true;
     const windowed: boolean = body?.windowed === true;
+    const auto: boolean = durationKey === 'auto';
     const exclude: Range[] = Array.isArray(body?.exclude)
       ? body.exclude
           .filter((r: any) => r && Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start)
@@ -353,7 +365,7 @@ serve(async (req) => {
 
     const startTime = Date.now();
     const sentences = buildSentences(lines, words);
-    const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude, windowed);
+    const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude, windowed, auto);
     console.log('SENTENCES', sentences.length, 'lines', lines.length, 'words', words ? words.length : 0);
 
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
