@@ -35,6 +35,8 @@ export class ViralMomentsError extends Error {
 export type FindBestMomentsResult = {
   moments: ViralMoment[];
   videoTopic?: string;
+  // Which AI answered: the backup (Gemini) takes over when Claude has no credits left.
+  provider?: "claude" | "gemini";
 };
 
 // Auxiliary hints extracted from the raw audio (loudness spikes, overlapping
@@ -179,7 +181,7 @@ export const ViralMomentsService = {
     if (!data?.success) {
       throw new ViralMomentsError(data?.message || "Erro ao analisar o vídeo.", data?.code || "UNKNOWN_ERROR");
     }
-    return { moments: data.moments as ViralMoment[], videoTopic: data.meta?.videoTopic };
+    return { moments: data.moments as ViralMoment[], videoTopic: data.meta?.videoTopic, provider: data.meta?.provider };
   },
 
   // Second pass: a stricter model re-reads each candidate's exact text, drops the
@@ -191,7 +193,7 @@ export const ViralMomentsService = {
     videoTopic: string | undefined,
     candidates: ViralMoment[],
     refresh = false
-  ): Promise<{ moments: ViralMoment[]; rejected: ViralMoment[] }> {
+  ): Promise<{ moments: ViralMoment[]; rejected: ViralMoment[]; provider?: "claude" | "gemini" }> {
     const { data, error } = await supabase.functions.invoke("viral-judge", {
       body: {
         videoId,
@@ -218,6 +220,6 @@ export const ViralMomentsService = {
     if (!data?.success) {
       throw new ViralMomentsError(data?.message || "Erro ao refinar os cortes.", data?.code || "UNKNOWN_ERROR");
     }
-    return { moments: data.moments as ViralMoment[], rejected: (data.rejected ?? []) as ViralMoment[] };
+    return { moments: data.moments as ViralMoment[], rejected: (data.rejected ?? []) as ViralMoment[], provider: data.meta?.provider };
   },
 };

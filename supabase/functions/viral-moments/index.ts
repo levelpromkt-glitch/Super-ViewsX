@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildSentences, type Sentence, type WordTiming } from "./sentences.ts";
+import { callGeminiStructured, isFallbackEligible } from "./llm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -368,43 +369,82 @@ serve(async (req) => {
     const prompt = buildPrompt(title, sentences, duration, audioSignals, exclude, windowed, auto);
     console.log('SENTENCES', sentences.length, 'lines', lines.length, 'words', words ? words.length : 0);
 
-    const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 16000,
-        thinking: { type: 'disabled' },
-        tools: [MOMENTS_TOOL],
-        tool_choice: { type: 'tool', name: 'return_moments' },
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error('Anthropic API error', aiResponse.status, errText);
-      const noCredits = /credit balance is too low/i.test(errText);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: noCredits ? 'AI_NO_CREDITS' : 'AI_API_ERROR',
-          message: noCredits
-            ? 'Os créditos da IA acabaram. Recarregue o saldo da API da Anthropic (Plans & Billing) e tente de novo.'
-            : 'Falha ao analisar o vídeo com IA.',
+    // Claude first; when it cannot serve us (no credits, rate limit, outage) the same request goes
+    // to Gemini, if a GEMINI_API_KEY is configured.
+    let aiData: any = null;
+    let rawInput: any = null;
+    let provider: 'claude' | 'gemini' = 'claude';
+    let modelUsed = ANTHROPIC_MODEL;
+    let primaryError: { status: number; text: string } | null = null;
+    try {
+      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: ANTHROPIC_MODEL,
+          max_tokens: 16000,
+          thinking: { type: 'disabled' },
+          tools: [MOMENTS_TOOL],
+          tool_choice: { type: 'tool', name: 'return_moments' },
+          messages: [{ role: 'user', content: prompt }],
         }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      });
+      if (aiResponse.ok) {
+        aiData = await aiResponse.json();
+        console.log('DEBUG stop_reason', aiData?.stop_reason, 'usage', JSON.stringify(aiData?.usage));
+        const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
+        rawInput = toolBlock?.input as any;
+      } else {
+        primaryError = { status: aiResponse.status, text: await aiResponse.text() };
+      }
+    } catch (err) {
+      primaryError = { status: 0, text: (err as Error).message };
     }
 
-    const aiData = await aiResponse.json();
-    console.log('DEBUG stop_reason', aiData?.stop_reason, 'usage', JSON.stringify(aiData?.usage));
-    const toolBlock = (aiData?.content || []).find((b: any) => b.type === 'tool_use' && b.name === 'return_moments');
-    const rawInput = toolBlock?.input as any;
+    let fallbackError: string | null = null;
+    if (primaryError) {
+      console.error('Anthropic API error', primaryError.status, primaryError.text);
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (geminiKey && isFallbackEligible(primaryError.status, primaryError.text)) {
+        const g = await callGeminiStructured({
+          apiKey: geminiKey,
+          prompt: prompt + '\n\nIMPORTANTE: não chame nenhuma tool. Responda SOMENTE com o JSON no formato do schema, com os campos "videoTopic" e "moments".',
+          schema: MOMENTS_TOOL.input_schema,
+          maxOutputTokens: 16000,
+        });
+        if (g.ok) {
+          rawInput = g.data;
+          provider = 'gemini';
+          modelUsed = g.model;
+          console.log('Gemini fallback used', g.model);
+        } else {
+          fallbackError = g.error;
+          console.error('Gemini fallback failed', g.error);
+        }
+      }
+      if (!rawInput) {
+        const noCredits = /credit balance is too low/i.test(primaryError.text);
+        const triedFallback = fallbackError !== null;
+        return new Response(
+          JSON.stringify({
+            success: false,
+            // With a backup configured but failing, this is no longer a "refill your credits" case:
+            // the caller should retry later instead of aborting the whole analysis.
+            code: triedFallback ? 'AI_FALLBACK_FAILED' : noCredits ? 'AI_NO_CREDITS' : 'AI_API_ERROR',
+            message: triedFallback
+              ? 'A IA principal está sem créditos e o modelo reserva não respondeu agora (limite do plano gratuito). Tente de novo em alguns minutos.'
+              : noCredits
+                ? 'Os créditos da IA acabaram. Recarregue o saldo da API da Anthropic (Plans & Billing) e tente de novo.'
+                : 'Falha ao analisar o vídeo com IA.',
+          }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Empirically, large responses (a long video easily produces 15+
     // moments) sometimes get escape-stringified by the model at some level
@@ -533,9 +573,10 @@ serve(async (req) => {
     console.log('FINAL moments', moments.length);
     const executionTime = Date.now() - startTime;
     const videoTopic = typeof videoTopicOut === 'string' ? videoTopicOut.slice(0, 400) : undefined;
-    const meta = { model: ANTHROPIC_MODEL, executionTime, cached: false, videoTopic };
+    const meta = { model: modelUsed, provider, executionTime, cached: false, videoTopic };
 
-    await setCache(cacheSeed, videoId, { moments, meta });
+    // Backup-model results are not cached: once Claude is back, the next run should use it.
+    if (provider === 'claude') await setCache(cacheSeed, videoId, { moments, meta });
 
     return new Response(
       JSON.stringify({ success: true, videoId, moments, meta }),

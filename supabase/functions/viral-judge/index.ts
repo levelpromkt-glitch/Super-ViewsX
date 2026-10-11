@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callGeminiStructured, isFallbackEligible } from "./llm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -223,10 +224,15 @@ serve(async (req) => {
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) batches.push(candidates.slice(i, i + BATCH_SIZE));
 
     let modelUsed = JUDGE_MODELS[0];
+    let usedGemini = false;
     const modelErrors: string[] = [];
+    const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
     const runBatch = async (batch: Candidate[]) => {
       const prompt = buildPrompt(batch, duration, videoTopic, isAuto);
+      // Did Claude fail in a way the backup model can cover (no credits, limits, outage)?
+      let fallbackEligible = false;
       for (const model of JUDGE_MODELS) {
+        let noCredits = false;
         // One retry when the API is rate limiting or overloaded (many batches run at once).
         for (let attempt = 0; attempt < 2; attempt++) {
           let retryable = false;
@@ -239,13 +245,32 @@ serve(async (req) => {
             modelErrors.push(`${model}: ${result.status} ${result.errText.slice(0, 200)}`);
             console.error('viral-judge model error', model, result.status, result.errText.slice(0, 300));
             retryable = [429, 500, 502, 503, 529].includes(result.status);
+            noCredits = /credit balance is too low/i.test(result.errText);
+            if (isFallbackEligible(result.status, result.errText)) fallbackEligible = true;
           } catch (err) {
             modelErrors.push(`${model}: ${(err as Error).message}`);
             console.error('viral-judge call failed', model, (err as Error).message);
+            fallbackEligible = true;
           }
           if (!retryable || attempt === 1) break;
           await new Promise((resolve) => setTimeout(resolve, 2500));
         }
+        // No credits at all: the second Claude model would fail the same way.
+        if (noCredits) break;
+      }
+      if (fallbackEligible && geminiKey) {
+        const g = await callGeminiStructured({
+          apiKey: geminiKey,
+          prompt: prompt + '\n\nIMPORTANTE: não chame nenhuma tool. Responda SOMENTE com o JSON no formato do schema, com o campo "results" contendo um item para cada candidato recebido.',
+          schema: JUDGE_TOOL.input_schema,
+          maxOutputTokens: 16000,
+        });
+        if (g.ok && Array.isArray(g.data?.results)) {
+          usedGemini = true;
+          modelUsed = g.model;
+          return g.data.results as any[];
+        }
+        modelErrors.push(g.ok ? 'gemini: resposta sem "results"' : `gemini: ${g.error}`);
       }
       return null;
     };
@@ -363,10 +388,11 @@ serve(async (req) => {
       if (rejected.length >= 30) break;
     }
     const rejectedOut = rejected.map((o, i) => ({ id: `o${i + 1}`, other: true, ...o }));
-    const meta = { model: modelUsed, executionTime: Date.now() - startedAt, candidates: candidates.length, keptByJudge: judged.filter((j) => j?.keep === true).length, droppedByLength, kept: moments.length, failedBatches, modelErrors, cached: false };
+    const meta = { model: modelUsed, provider: usedGemini ? 'gemini' : 'claude', executionTime: Date.now() - startedAt, candidates: candidates.length, keptByJudge: judged.filter((j) => j?.keep === true).length, droppedByLength, kept: moments.length, failedBatches, modelErrors, cached: false };
 
     // Don't cache a partial result: a failed batch would otherwise stick for 24h.
-    if (failedBatches === 0) {
+    // (Backup-model verdicts are not cached either: once Claude is back it should do the judging.)
+    if (failedBatches === 0 && !usedGemini) {
       await supabase.from('api_search_cache').upsert({
         cache_key: cacheKey,
         platform: 'viral-judge',

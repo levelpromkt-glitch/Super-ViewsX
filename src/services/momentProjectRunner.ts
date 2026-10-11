@@ -113,7 +113,10 @@ const MAX_OTHERS = 40;
 
 const isNoCredits = (error: unknown) => error instanceof Error && /créditos da IA/i.test(error.message);
 
-type SearchResult = { moments: ViralMoment[]; others: ViralMoment[]; videoTopic?: string; warning?: string };
+type SearchResult = { moments: ViralMoment[]; others: ViralMoment[]; videoTopic?: string; warning?: string; usedBackup?: boolean };
+
+const BACKUP_NOTICE =
+  "A IA principal estava sem créditos, então esta análise usou o modelo reserva (Gemini). A qualidade pode ser menor; rode de novo quando os créditos voltarem.";
 
 async function searchMoments(
   key: string,
@@ -138,6 +141,7 @@ async function searchMoments(
   report();
 
   const results: ({ moments: ViralMoment[]; videoTopic?: string } | null)[] = new Array(windows.length).fill(null);
+  let usedBackup = false;
   const errors: unknown[] = [];
   let next = 0;
   let fatal: unknown = null;
@@ -155,6 +159,7 @@ async function searchMoments(
             key, "", w.lines, duration, signals, refresh, w.words, nearby, !single
           );
           results[i] = { moments: r.moments, videoTopic: r.videoTopic };
+          if (r.provider === "gemini") usedBackup = true;
           break;
         } catch (error) {
           if (isNoCredits(error)) {
@@ -187,7 +192,7 @@ async function searchMoments(
     failedWindows > 0
       ? `${failedWindows} ${failedWindows === 1 ? "parte do vídeo não pôde" : "partes do vídeo não puderam"} ser analisada${failedWindows === 1 ? "" : "s"}. Rode "Nova análise" para tentar achar os cortes que faltaram.`
       : undefined;
-  if (candidates.length === 0) return { moments: [], others: [], videoTopic, warning };
+  if (candidates.length === 0) return { moments: [], others: [], videoTopic, warning, usedBackup };
 
   // ---- 2. judge, in chunks
   onStatus(`Refinando ${candidates.length} candidatos com uma segunda IA (só os mais virais passam)...`);
@@ -203,6 +208,7 @@ async function searchMoments(
   judgedChunks.forEach((r, ci) => {
     if (r.status === "fulfilled") {
       judgeOk++;
+      if (r.value.provider === "gemini") usedBackup = true;
       kept.push(...r.value.moments);
       others.push(...r.value.rejected);
     } else {
@@ -226,6 +232,7 @@ async function searchMoments(
       others: [],
       videoTopic,
       warning: warning ?? "A revisão da segunda IA falhou; estes cortes vêm só da primeira análise.",
+      usedBackup,
     };
   }
 
@@ -235,7 +242,7 @@ async function searchMoments(
     .filter((o) => !finalMoments.some((m) => overlapRatio(m, o) > 0.5))
     .slice(0, MAX_OTHERS)
     .map((o, i) => ({ ...withoutSlice(o), id: `o${i + 1}`, other: true }));
-  return { moments: finalMoments, others: finalOthers, videoTopic, warning };
+  return { moments: finalMoments, others: finalOthers, videoTopic, warning, usedBackup };
 }
 
 const sortStored = (list: StoredMoment[]): StoredMoment[] => [
@@ -310,7 +317,8 @@ async function analyze(
   }
 
   await MomentProjectsService.update(id, { stage: "ready", error: null, moments_count: total, requested_duration: null });
-  setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind, notice: result.warning });
+  const notices = [result.warning, result.usedBackup ? BACKUP_NOTICE : undefined].filter(Boolean);
+  setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind, notice: notices.length > 0 ? notices.join(" ") : undefined });
 
   // Covers for the cards come from the file picked in this session; saved with the run
   // so they are still there when the project is reopened later.
