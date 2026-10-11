@@ -600,7 +600,13 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
           <div className="mm-gen-left">
             <span className="mm-gen-kicker"><i /> Geração em andamento</span>
             <h2>Seu vídeo está virando cortes</h2>
-            <p>Analisamos o conteúdo e preparamos cada corte individualmente. Você pode sair desta tela: o projeto continua sendo processado e fica salvo em "Seus projetos".</p>
+            <p>
+              {stage === "uploading"
+                ? "Estamos enviando o vídeo. Mantenha esta aba aberta até o envio terminar: se você fechar ou recarregar a página, o envio é interrompido. Você pode navegar por outras telas do Super Views sem problema."
+                : stage === "transcribing"
+                  ? "Estamos transcrevendo o áudio. Se você fechar a aba, a transcrição continua no servidor e você retoma o projeto depois em \"Seus projetos\"."
+                  : "A IA está lendo o vídeo e escolhendo os cortes. Mantenha esta aba aberta até os cortes aparecerem: você pode navegar por outras telas do Super Views, mas, se fechar a aba, a busca recomeça quando você reabrir o projeto."}
+            </p>
             <ol className="mm-steps">
               {steps.map((s, i) => (
                 <li key={s.label} data-state={stepStates[i]}>

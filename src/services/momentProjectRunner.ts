@@ -75,6 +75,23 @@ const subscribe = (fn: () => void) => {
 
 export const getRunnerState = (projectId: string) => states.get(projectId);
 export const isRunnerActive = (projectId: string) => active.has(projectId);
+
+// The upload and the AI search run inside this browser tab: closing or reloading it stops them.
+// (Transcription runs on the video server, so it survives.) Ask the browser to confirm first.
+const hasWorkThatDiesWithTheTab = () => {
+  for (const id of active) {
+    const stage = states.get(id)?.stage;
+    if (stage === "uploading" || stage === "finding") return true;
+  }
+  return false;
+};
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (e) => {
+    if (!hasWorkThatDiesWithTheTab()) return;
+    e.preventDefault();
+    e.returnValue = ""; // required by some browsers to show the confirmation
+  });
+}
 export const clearRunnerState = (projectId: string) => {
   states.delete(projectId);
   emit();
