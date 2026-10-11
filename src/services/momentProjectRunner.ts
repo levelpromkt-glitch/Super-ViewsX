@@ -1,20 +1,14 @@
 import { useSyncExternalStore } from "react";
 import { TranscriptService, TranscriptError } from "./transcriptService";
-import {
-  ViralMomentsService,
-  ViralMomentsError,
-  type DurationPreset,
-  type ViralMoment,
-} from "./viralMomentsService";
+import { ViralMomentsService, ViralMomentsError, type DurationPreset } from "./viralMomentsService";
 import {
   MomentProjectsService,
+  type MomentJob,
   type MomentProject,
   type MomentRun,
   type ProjectStage,
   type ProjectTranscript,
-  type StoredMoment,
 } from "./momentProjectsService";
-import { buildWindows, dedupeByOverlap, overlapRatio, type Range } from "./momentWindows";
 import {
   extractYouTubeId,
   generateMomentThumbnails,
@@ -22,11 +16,13 @@ import {
   readVideoInfo,
 } from "@/components/melhores-momentos/momentUtils";
 
-// Runs the whole "video -> moments" pipeline outside of any React component, so
-// the work keeps going while the user moves between the project list and a
-// project page. Progress that matters (stage, transcript, runs) is saved to the
-// database; what only exists while the page is open (upload percentage, status
-// text) lives in `states`.
+// Runs the "video -> moments" pipeline outside of any React component, so the work keeps going
+// while the user moves between the project list and a project page. Only the upload needs this
+// browser tab. Transcription runs on the video server and the AI search runs in the
+// `moment-jobs` edge function: here we just create the job and watch it (the user may even close
+// the tab and find the cuts ready later). Progress that matters (stage, transcript, runs) is saved
+// to the database; what only exists while the page is open (upload percentage, status text)
+// lives in `states`.
 
 export type RunnerState = {
   stage: ProjectStage;
@@ -76,12 +72,11 @@ const subscribe = (fn: () => void) => {
 export const getRunnerState = (projectId: string) => states.get(projectId);
 export const isRunnerActive = (projectId: string) => active.has(projectId);
 
-// The upload and the AI search run inside this browser tab: closing or reloading it stops them.
-// (Transcription runs on the video server, so it survives.) Ask the browser to confirm first.
+// The upload runs inside this browser tab: closing or reloading it stops it. (Transcription and
+// the AI search run on the server, so they survive.) Ask the browser to confirm first.
 const hasWorkThatDiesWithTheTab = () => {
   for (const id of active) {
-    const stage = states.get(id)?.stage;
-    if (stage === "uploading" || stage === "finding") return true;
+    if (states.get(id)?.stage === "uploading") return true;
   }
   return false;
 };
@@ -112,169 +107,75 @@ const errorMessage = (error: unknown) => {
 // ---------------------------------------------------------------------------
 // Finding the moments
 //
-// 1. The transcript is read in ~10 minute windows (each by its own AI call, a few at a time):
-//    a model that reads a short stretch carefully finds far more than one that skims an hour.
-//    Short videos are a single window.
-// 2. Every window's candidates are merged (overlaps removed) and re-read by a stricter judge,
-//    in chunks, which keeps the genuinely strong cuts and fixes their start and end.
-// 3. What the judge leaves out is not thrown away: the best of it comes back as "other
-//    candidates", each with the reason it stayed out.
+// The `moment-jobs` edge function does the work (it reads the transcript in ~10 minute windows,
+// has a second AI judge the candidates and saves the result as a run). The browser only creates
+// the job row and then polls it for progress, so closing the tab does not stop anything.
 // ---------------------------------------------------------------------------
 
-const WINDOW_CONCURRENCY = 4;
-const CANDIDATES_PER_WINDOW = 9; // when there are several windows
-const CANDIDATES_SINGLE_WINDOW = 30;
-const MAX_CANDIDATES = 80;
-const JUDGE_CHUNK = 24;
-const MAX_OTHERS = 40;
+const POLL_MS = 3000;
+const MAX_POLL_ERRORS = 20;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const isNoCredits = (error: unknown) => error instanceof Error && /créditos da IA/i.test(error.message);
+const jobStatusText = (job: MomentJob) => job.status_text || "Analisando os melhores momentos com IA...";
 
-type SearchResult = { moments: ViralMoment[]; others: ViralMoment[]; videoTopic?: string; warning?: string; usedBackup?: boolean };
-
-const BACKUP_NOTICE =
-  "A IA principal estava sem créditos, então esta análise usou o modelo reserva (Gemini). A qualidade pode ser menor; rode de novo quando os créditos voltarem.";
-
-async function searchMoments(
-  key: string,
-  transcript: ProjectTranscript,
-  duration: DurationPreset,
-  refresh: boolean,
-  exclude: Range[],
-  onStatus: (status: string) => void
-): Promise<SearchResult> {
-  const withoutSlice = (m: ViralMoment): ViralMoment => {
-    const { slice: _slice, ...rest } = m;
-    return rest as ViralMoment;
-  };
-
-  // ---- 1. scan every window
-  const windows = buildWindows(transcript);
-  if (windows.length === 0) return { moments: [], others: [] };
-  const single = windows.length === 1;
-  let done = 0;
-  const report = () =>
-    onStatus(single ? "Analisando os melhores momentos com IA..." : `Lendo o vídeo em partes (${done} de ${windows.length})...`);
-  report();
-
-  const results: ({ moments: ViralMoment[]; videoTopic?: string } | null)[] = new Array(windows.length).fill(null);
-  let usedBackup = false;
-  const errors: unknown[] = [];
-  let next = 0;
-  let fatal: unknown = null;
-
-  const worker = async () => {
-    while (fatal === null) {
-      const i = next++;
-      if (i >= windows.length) return;
-      const w = windows[i];
-      const signals = transcript.audioSignals?.filter((s) => s.time >= w.start && s.time <= w.end);
-      const nearby = exclude.filter((r) => r.end >= w.start - 30 && r.start <= w.end + 30);
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const r = await ViralMomentsService.findBestMoments(
-            key, "", w.lines, duration, signals, refresh, w.words, nearby, !single
-          );
-          results[i] = { moments: r.moments, videoTopic: r.videoTopic };
-          if (r.provider === "gemini") usedBackup = true;
-          break;
-        } catch (error) {
-          if (isNoCredits(error)) {
-            fatal = error;
-            return;
-          }
-          if (attempt === 1) errors.push(error);
-        }
-      }
-      done++;
-      report();
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(WINDOW_CONCURRENCY, windows.length) }, worker));
-  if (fatal) throw fatal;
-  if (results.every((r) => r === null)) throw errors[0] ?? new ViralMomentsError("Falha ao analisar o vídeo com IA.", "UNKNOWN_ERROR");
-  const failedWindows = results.filter((r) => r === null).length;
-
-  // ---- merge the windows' candidates
-  const cap = single ? CANDIDATES_SINGLE_WINDOW : CANDIDATES_PER_WINDOW;
-  let candidates: ViralMoment[] = [];
-  results.forEach((r, wi) => {
-    if (!r) return;
-    const best = [...r.moments].sort((a, b) => b.score - a.score).slice(0, cap);
-    best.forEach((m) => candidates.push({ ...m, id: `w${wi}-${m.id}` }));
-  });
-  candidates = dedupeByOverlap(candidates).slice(0, MAX_CANDIDATES);
-  const videoTopic = results.find((r) => r?.videoTopic)?.videoTopic;
-  const warning =
-    failedWindows > 0
-      ? `${failedWindows} ${failedWindows === 1 ? "parte do vídeo não pôde" : "partes do vídeo não puderam"} ser analisada${failedWindows === 1 ? "" : "s"}. Rode "Nova análise" para tentar achar os cortes que faltaram.`
-      : undefined;
-  if (candidates.length === 0) return { moments: [], others: [], videoTopic, warning, usedBackup };
-
-  // ---- 2. judge, in chunks
-  onStatus(`Refinando ${candidates.length} candidatos com uma segunda IA (só os mais virais passam)...`);
-  const chunks: ViralMoment[][] = [];
-  for (let i = 0; i < candidates.length; i += JUDGE_CHUNK) chunks.push(candidates.slice(i, i + JUDGE_CHUNK));
-  const judgedChunks = await Promise.allSettled(
-    chunks.map((c) => ViralMomentsService.judgeMoments(key, duration, videoTopic, c, refresh))
-  );
-
-  const kept: ViralMoment[] = [];
-  const others: ViralMoment[] = [];
-  let judgeOk = 0;
-  judgedChunks.forEach((r, ci) => {
-    if (r.status === "fulfilled") {
-      judgeOk++;
-      if (r.value.provider === "gemini") usedBackup = true;
-      kept.push(...r.value.moments);
-      others.push(...r.value.rejected);
-    } else {
-      console.error("Revisão de um grupo de candidatos falhou", r.reason);
-      // Never lose them: they come back as candidates the second AI did not get to review.
-      others.push(
-        ...chunks[ci].map((m) => ({
-          ...withoutSlice(m),
-          other: true,
-          rejectReason: "A segunda IA não conseguiu revisar este candidato. A nota é da primeira análise.",
-        }))
-      );
-    }
-  });
-
-  // Judge down entirely: the first-pass list still beats an empty screen.
-  if (judgeOk === 0) {
-    const firstPass = [...candidates].sort((a, b) => b.score - a.score);
-    return {
-      moments: firstPass.slice(0, CANDIDATES_SINGLE_WINDOW).map(withoutSlice),
-      others: [],
-      videoTopic,
-      warning: warning ?? "A revisão da segunda IA falhou; estes cortes vêm só da primeira análise.",
-      usedBackup,
-    };
+// Covers for the cards come from the file picked in this session; saved with the run
+// so they are still there when the project is reopened later.
+async function addThumbnails(file: File, runId: string, addedIds: string[], projectId: string) {
+  const videoUrl = URL.createObjectURL(file);
+  try {
+    const run = (await MomentProjectsService.listRuns(projectId)).find((r) => r.id === runId);
+    if (!run) return;
+    const ids = new Set(addedIds);
+    const fresh = run.moments.filter((m) => ids.has(m.id) && !m.thumb);
+    if (fresh.length === 0) return;
+    const thumbs = await generateMomentThumbnails(fresh, videoUrl);
+    const withThumbs = run.moments.map((m) => (thumbs[m.id] ? { ...m, thumb: thumbs[m.id] } : m));
+    await MomentProjectsService.updateRunMoments(runId, withThumbs);
+    emitData();
+  } catch (error) {
+    console.error("Falha ao gerar capas dos cortes", error);
+  } finally {
+    URL.revokeObjectURL(videoUrl);
   }
-
-  // ---- 3. final lists: recommended first, then the best of the rest
-  const finalMoments = dedupeByOverlap(kept).map((m, i) => ({ ...withoutSlice(m), id: `m${i + 1}` }));
-  const finalOthers = dedupeByOverlap(others)
-    .filter((o) => !finalMoments.some((m) => overlapRatio(m, o) > 0.5))
-    .slice(0, MAX_OTHERS)
-    .map((o, i) => ({ ...withoutSlice(o), id: `o${i + 1}`, other: true }));
-  return { moments: finalMoments, others: finalOthers, videoTopic, warning, usedBackup };
 }
 
-const sortStored = (list: StoredMoment[]): StoredMoment[] => [
-  ...list.filter((m) => !m.other).sort((a, b) => b.score - a.score),
-  ...list.filter((m) => m.other).sort((a, b) => b.score - a.score),
-];
+// Watches one job until it ends. Resolves when it finished; throws with its error when it failed.
+async function trackJob(projectId: string, jobId: string, kind: "initial" | "extra", file?: File) {
+  let errors = 0;
+  for (;;) {
+    let job: MomentJob | null;
+    try {
+      job = await MomentProjectsService.getJob(jobId);
+      errors = 0;
+    } catch (error) {
+      // A hiccup in the connection must not drop a job that is still running on the server.
+      if (++errors >= MAX_POLL_ERRORS) throw error;
+      await sleep(POLL_MS);
+      continue;
+    }
+    if (!job) throw new ViralMomentsError("A análise não foi encontrada.", "JOB_NOT_FOUND");
 
-// Last step of every flow: find the moments, save them as a run, mark the project ready.
+    if (job.status === "failed") throw new ViralMomentsError(job.error || "Não foi possível concluir a análise.", "JOB_FAILED");
+
+    if (job.status === "done") {
+      setState(projectId, { stage: "ready", percent: null, status: "", kind, notice: job.notice || undefined });
+      emitData();
+      const added = job.added_ids ?? [];
+      if (file && job.run_id && added.length > 0) void addThumbnails(file, job.run_id, added, projectId);
+      return;
+    }
+
+    setState(projectId, { stage: "finding", percent: job.progress, status: jobStatusText(job), kind });
+    await sleep(POLL_MS);
+  }
+}
+
+// Creates the job on the server and follows it. For a first pass the project is marked as finding.
 async function analyze(
-  project: Pick<MomentProject, "id" | "source_type" | "source_key">,
-  transcript: ProjectTranscript,
+  project: Pick<MomentProject, "id">,
   duration: DurationPreset,
   opts: {
     kind: "initial" | "extra";
-    refresh: boolean;
     file?: File;
     // An earlier round with this same duration: the new one looks for OTHER moments
     // and its cuts are added to that round instead of repeating it.
@@ -282,77 +183,17 @@ async function analyze(
   }
 ) {
   const { id } = project;
-  const searchKey = project.source_key;
   if (opts.kind === "initial") {
     await MomentProjectsService.update(id, { stage: "finding", requested_duration: duration, error: null });
   }
-  setState(id, { stage: "finding", percent: null, status: "Analisando os melhores momentos com IA...", kind: opts.kind });
-
-  // Everything already in that round (recommended or not) must not come back.
-  const exclude = (opts.existing?.moments ?? []).map((m) => ({ start: m.start, end: m.end }));
-  const result = await searchMoments(searchKey, transcript, duration, opts.refresh, exclude, (status) =>
-    setState(id, { stage: "finding", percent: null, status, kind: opts.kind })
-  );
-
-  // Safety net: the AI may still return part of a passage that was already cut.
-  const isNew = (m: Range) => !exclude.some((r) => overlapRatio(m, r) > 0.3);
-  const freshMoments = opts.existing ? result.moments.filter(isNew) : result.moments;
-  const freshOthers = opts.existing ? result.others.filter(isNew) : result.others;
-
-  let target: MomentRun;
-  let added: StoredMoment[];
-  let total: number;
-
-  if (opts.existing) {
-    if (freshMoments.length + freshOthers.length === 0) {
-      setState(id, {
-        stage: "ready",
-        percent: null,
-        status: "",
-        kind: opts.kind,
-        notice: result.warning ?? "Não encontramos mais cortes novos nesse vídeo com essa duração. Tente outra duração em \"Nova análise\".",
-      });
-      return;
-    }
-    // New ids continue after the existing ones so the cards never collide.
-    const maxId = (prefix: string) =>
-      opts.existing!.moments.filter((m) => m.id.startsWith(prefix)).reduce((max, m) => Math.max(max, Number(m.id.replace(/\D/g, "")) || 0), 0);
-    let nm = maxId("m");
-    let no = maxId("o");
-    added = [
-      ...freshMoments.map((m) => ({ ...m, id: `m${++nm}` })),
-      ...freshOthers.map((m) => ({ ...m, id: `o${++no}`, other: true })),
-    ];
-    const merged = sortStored([...opts.existing.moments, ...added]);
-    await MomentProjectsService.updateRunMoments(opts.existing.id, merged);
-    target = { ...opts.existing, moments: merged };
-    total = merged.filter((m) => !m.other).length;
-  } else {
-    added = sortStored([...result.moments, ...result.others] as StoredMoment[]);
-    target = await MomentProjectsService.addRun(id, duration, added, result.videoTopic);
-    total = result.moments.length;
-  }
-
-  await MomentProjectsService.update(id, { stage: "ready", error: null, moments_count: total, requested_duration: null });
-  const notices = [result.warning, result.usedBackup ? BACKUP_NOTICE : undefined].filter(Boolean);
-  setState(id, { stage: "ready", percent: null, status: "", kind: opts.kind, notice: notices.length > 0 ? notices.join(" ") : undefined });
-
-  // Covers for the cards come from the file picked in this session; saved with the run
-  // so they are still there when the project is reopened later.
-  if (opts.file && added.length > 0) {
-    const videoUrl = URL.createObjectURL(opts.file);
-    try {
-      const thumbs = await generateMomentThumbnails(added, videoUrl);
-      const addedIds = new Set(added.map((m) => m.id));
-      const withThumbs = target.moments.map((m) => (addedIds.has(m.id) ? { ...m, thumb: thumbs[m.id] } : m));
-      await MomentProjectsService.updateRunMoments(target.id, withThumbs);
-      emitData();
-    } catch (error) {
-      console.error("Falha ao gerar capas dos cortes", error);
-    } finally {
-      URL.revokeObjectURL(videoUrl);
-    }
-  }
+  setState(id, { stage: "finding", percent: 0, status: "Iniciando a análise...", kind: opts.kind });
+  const jobId = await MomentProjectsService.createJob({
+    projectId: id,
+    duration,
+    kind: opts.kind,
+    existingRun: opts.existing ?? null,
+  });
+  await trackJob(id, jobId, opts.kind, opts.file ?? sessionFiles.get(id));
 }
 
 const fail = async (projectId: string, error: unknown, kind: "initial" | "extra") => {
@@ -444,20 +285,11 @@ export const MomentProjectRunner = {
         await MomentProjectsService.update(id, { source_key: key, stage: "transcribing" });
 
         const manual = parsePastedTranscript(opts.pastedTranscript || "");
-        const transcript: ProjectTranscript =
-          manual.length > 0
-            ? await (async () => {
-                const t = { lines: manual };
-                await MomentProjectsService.saveTranscript(id, t, null);
-                return t;
-              })()
-            : await transcribeUpload(id, key);
+        if (manual.length > 0) await MomentProjectsService.saveTranscript(id, { lines: manual }, null);
+        else await transcribeUpload(id, key);
 
-        await analyze({ id, source_type: "upload", source_key: key }, transcript, duration, {
-          kind: "initial",
-          refresh: false,
-          file,
-        });
+        // From here on the server does the work: the tab may be closed.
+        await analyze({ id }, duration, { kind: "initial", file });
       } catch (error) {
         await fail(id, error, "initial");
       } finally {
@@ -497,11 +329,8 @@ export const MomentProjectRunner = {
         void fetchYoutubeTitle(videoId).then((title) => {
           if (title) MomentProjectsService.update(id, { title }).then(emitData).catch(() => {});
         });
-        const transcript = await transcribeYoutube(id, videoId);
-        await analyze({ id, source_type: "youtube", source_key: videoId }, transcript, opts.duration, {
-          kind: "initial",
-          refresh: false,
-        });
+        await transcribeYoutube(id, videoId);
+        await analyze({ id }, opts.duration, { kind: "initial" });
       } catch (error) {
         await fail(id, error, "initial");
       } finally {
@@ -514,21 +343,20 @@ export const MomentProjectRunner = {
   },
 
   // Another round on a finished project (e.g. another clip length) — no new upload or transcription.
-  async startRun(projectId: string, duration: DurationPreset, opts: { refresh?: boolean } = {}): Promise<void> {
+  async startRun(projectId: string, duration: DurationPreset): Promise<void> {
     if (active.has(projectId)) return;
     active.add(projectId);
-    setState(projectId, { stage: "finding", percent: null, status: "Analisando os melhores momentos com IA...", kind: "extra" });
+    setState(projectId, { stage: "finding", percent: 0, status: "Iniciando a análise...", kind: "extra" });
     try {
-      const [project, transcript] = await Promise.all([
-        MomentProjectsService.get(projectId),
-        MomentProjectsService.getTranscript(projectId),
-      ]);
-      if (!transcript) throw new ViralMomentsError("A transcrição deste projeto não está disponível. Envie o vídeo de novo.", "NO_TRANSCRIPT");
+      // Already running on the server (e.g. started from another tab): just follow it.
+      const running = await MomentProjectsService.latestActiveJob(projectId);
+      if (running) {
+        await trackJob(projectId, running.id, running.kind, sessionFiles.get(projectId));
+        return;
+      }
       const runs = await MomentProjectsService.listRuns(projectId);
-      await analyze(project, transcript, duration, {
+      await analyze({ id: projectId }, duration, {
         kind: "extra",
-        refresh: opts.refresh ?? false,
-        file: sessionFiles.get(projectId),
         existing: runs.find((r) => r.duration === duration) ?? null,
       });
     } catch (error) {
@@ -552,7 +380,24 @@ export const MomentProjectRunner = {
   // pick up from the last saved step. An interrupted upload cannot be resumed.
   resume(project: MomentProject): void {
     const id = project.id;
-    if (active.has(id) || project.stage === "ready" || project.stage === "failed") return;
+    if (active.has(id) || project.stage === "failed") return;
+
+    // Finished project: nothing to redo, but a new round may still be running on the server.
+    if (project.stage === "ready") {
+      active.add(id);
+      void (async () => {
+        try {
+          const running = await MomentProjectsService.latestActiveJob(id);
+          if (running) await trackJob(id, running.id, running.kind, sessionFiles.get(id));
+        } catch (error) {
+          await fail(id, error, "extra");
+        } finally {
+          active.delete(id);
+          emitData();
+        }
+      })();
+      return;
+    }
 
     if (project.stage === "uploading") {
       void fail(id, new Error("O envio do vídeo foi interrompido. Envie o arquivo novamente."), "initial");
@@ -563,14 +408,18 @@ export const MomentProjectRunner = {
     void (async () => {
       try {
         const duration = project.requested_duration ?? "30-60";
-        let transcript = await MomentProjectsService.getTranscript(id);
-        if (!transcript) {
-          transcript =
-            project.source_type === "youtube"
-              ? await transcribeYoutube(id, project.source_key)
-              : await transcribeUpload(id, project.source_key, project.job_id);
+        // The search may already be running on the server (the tab was closed meanwhile).
+        const running = project.stage === "finding" ? await MomentProjectsService.latestActiveJob(id) : null;
+        if (running) {
+          await trackJob(id, running.id, running.kind, sessionFiles.get(id));
+          return;
         }
-        await analyze(project, transcript, duration, { kind: "initial", refresh: false });
+        const transcript = await MomentProjectsService.getTranscript(id);
+        if (!transcript) {
+          if (project.source_type === "youtube") await transcribeYoutube(id, project.source_key);
+          else await transcribeUpload(id, project.source_key, project.job_id);
+        }
+        await analyze({ id }, duration, { kind: "initial" });
       } catch (error) {
         await fail(id, error, "initial");
       } finally {

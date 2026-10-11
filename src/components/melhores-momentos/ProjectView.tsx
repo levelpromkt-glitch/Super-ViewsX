@@ -100,6 +100,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
 
   // Opened while the work was still going (after a reload, or from the list): pick it up again.
   useEffect(() => {
+    // Also for finished projects: a new round may still be running on the server.
     if (project && !isRunnerActive(project.id)) MomentProjectRunner.resume(project);
   }, [project]);
 
@@ -605,7 +606,7 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
                 ? "Estamos enviando o vídeo. Mantenha esta aba aberta até o envio terminar: se você fechar ou recarregar a página, o envio é interrompido. Você pode navegar por outras telas do Super Views sem problema."
                 : stage === "transcribing"
                   ? "Estamos transcrevendo o áudio. Se você fechar a aba, a transcrição continua no servidor e você retoma o projeto depois em \"Seus projetos\"."
-                  : "A IA está lendo o vídeo e escolhendo os cortes. Mantenha esta aba aberta até os cortes aparecerem: você pode navegar por outras telas do Super Views, mas, se fechar a aba, a busca recomeça quando você reabrir o projeto."}
+                  : "A IA está lendo o vídeo e escolhendo os cortes. Isso roda no servidor: você pode fechar a aba e voltar depois em \"Seus projetos\", os cortes estarão prontos."}
             </p>
             <ol className="mm-steps">
               {steps.map((s, i) => (

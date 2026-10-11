@@ -1,6 +1,5 @@
-import type { ProjectTranscript } from "./momentProjectsService";
-
-// Pure helpers of the moment search (no network), kept apart so they can be tested on their own.
+// Pure helpers of the moment search (no network, no Deno APIs): the windows a long transcript is
+// cut into and the overlap/dedupe rules. Kept in their own file so they can be tested on their own.
 
 export const WINDOW_SEC = 600;
 export const OVERLAP_SEC = 90;
@@ -8,7 +7,13 @@ export const SINGLE_WINDOW_MAX_SEC = 900; // up to 15 min: one call
 export const MIN_LAST_WINDOW_SEC = 150; // a shorter tail is absorbed by the previous window
 
 export type Range = { start: number; end: number };
-export type Win = { start: number; end: number; lines: ProjectTranscript["lines"]; words?: [string, number, number][] };
+export type TranscriptLine = { time?: string; seconds?: number; text: string; start: number; duration: number };
+export type Transcript = {
+  lines: TranscriptLine[];
+  audioSignals?: { time: number; type: string; detail?: string }[];
+  words?: [string, number, number][];
+};
+export type Win = { start: number; end: number; lines: TranscriptLine[]; words?: [string, number, number][] };
 
 // Share of the shorter of the two ranges that both cover (0 to 1).
 export const overlapRatio = (a: Range, b: Range) =>
@@ -24,9 +29,9 @@ export function dedupeByOverlap<T extends Range & { score: number }>(list: T[], 
 }
 
 // ~10 minute windows with some overlap; a short video is a single window.
-export function buildWindows(transcript: ProjectTranscript): Win[] {
+export function buildWindows(transcript: Transcript): Win[] {
   const { lines, words } = transcript;
-  if (lines.length === 0) return [];
+  if (!lines || lines.length === 0) return [];
   const total = Math.max(...lines.map((l) => l.start + l.duration));
   if (total <= SINGLE_WINDOW_MAX_SEC) return [{ start: 0, end: total, lines, words }];
 

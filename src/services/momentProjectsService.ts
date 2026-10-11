@@ -38,6 +38,24 @@ export type ProjectTranscript = {
   words?: [string, number, number][];
 };
 
+// A server-side analysis of a project (the server splits the video, asks the AI and saves a run).
+export type MomentJob = {
+  id: string;
+  project_id: string;
+  kind: "initial" | "extra";
+  status: "pending" | "running" | "done" | "failed";
+  phase: "scan" | "judge" | "done" | null;
+  progress: number;
+  status_text: string | null;
+  notice: string | null;
+  error: string | null;
+  run_id: string | null;
+  added_ids: string[] | null;
+  used_backup: boolean;
+};
+
+const JOB_COLUMNS = "id, project_id, kind, status, phase, progress, status_text, notice, error, run_id, added_ids, used_backup";
+
 export class MomentProjectsError extends Error {
   constructor(message: string, public code: string) {
     super(message);
@@ -153,6 +171,52 @@ export const MomentProjectsService = {
   async updateRunMoments(runId: string, moments: StoredMoment[]): Promise<void> {
     const { error } = await supabase.from("moment_runs").update({ moments }).eq("id", runId);
     if (error) throw new MomentProjectsError(error.message, "UPDATE_FAILED");
+  },
+
+  // Creating the row is all the browser has to do: the server picks it up on its own.
+  async createJob(input: {
+    projectId: string;
+    duration: DurationPreset;
+    kind: "initial" | "extra";
+    existingRun?: MomentRun | null;
+  }): Promise<string> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new MomentProjectsError("Sessão inválida.", "UNAUTHENTICATED");
+    // Everything already in that round (recommended or not) must not come back.
+    const exclude = (input.existingRun?.moments ?? []).map((m) => ({ start: m.start, end: m.end }));
+    const { data, error } = await supabase
+      .from("moment_jobs")
+      .insert({
+        project_id: input.projectId,
+        user_id: user.id,
+        duration: input.duration,
+        kind: input.kind,
+        existing_run_id: input.existingRun?.id ?? null,
+        exclude,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw new MomentProjectsError(error?.message || "Não foi possível iniciar a análise.", "INSERT_FAILED");
+    return data.id as string;
+  },
+
+  async getJob(id: string): Promise<MomentJob | null> {
+    const { data, error } = await supabase.from("moment_jobs").select(JOB_COLUMNS).eq("id", id).maybeSingle();
+    if (error) throw new MomentProjectsError(error.message, "QUERY_FAILED");
+    return (data as MomentJob | null) ?? null;
+  },
+
+  // An analysis that is still running for this project (e.g. the tab was closed meanwhile).
+  async latestActiveJob(projectId: string): Promise<MomentJob | null> {
+    const { data, error } = await supabase
+      .from("moment_jobs")
+      .select(JOB_COLUMNS)
+      .eq("project_id", projectId)
+      .in("status", ["pending", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    return data[0] as MomentJob;
   },
 
   async remove(id: string): Promise<void> {
