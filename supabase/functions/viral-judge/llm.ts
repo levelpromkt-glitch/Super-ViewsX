@@ -8,7 +8,7 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 // First model that answers wins. Override with the GEMINI_MODELS secret (comma separated).
 // Model names retire over time (gemini-2.0-flash already did): "-latest" follows the current one.
 // (The "-latest" alias is the most crowded one and answers 503 "overloaded" often, so it is not first.)
-const DEFAULT_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-flash-latest", "gemini-2.5-flash"];
+const DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"];
 
 export const geminiModels = (): string[] => {
   const fromEnv = (Deno.env.get("GEMINI_MODELS") || "").split(",").map((m) => m.trim()).filter(Boolean);

@@ -186,7 +186,8 @@ async function scanBatch(job: any): Promise<BatchResult> {
         return;
       }
       const message = String(r.data?.message || `Falha ao analisar o vídeo (${r.status}).`);
-      if (r.data?.code === "AI_NO_CREDITS") {
+      // Both codes mean "no AI available right now" — retrying immediately won't help.
+      if (r.data?.code === "AI_NO_CREDITS" || r.data?.code === "AI_FALLBACK_FAILED") {
         fatal = message; // no point in trying the other windows
         return;
       }
